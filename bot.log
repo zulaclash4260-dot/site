@@ -53,3 +53,6 @@
 {"level":"info","message":"پنل ادمین برای 6765985635 نمایش داده شد.","timestamp":"05:26:55"}
 {"level":"info","message":"کانال جوین اجباری -1002881122336 و اطلاعات جوین آن حذف شد.","timestamp":"05:27:41"}
 {"level":"info","message":"پنل ادمین برای 6765985635 نمایش داده شد.","timestamp":"05:27:41"}
+{"level":"info","message":"Connected to SQLite database.","timestamp":"14:08:09"}
+{"level":"info","message":"ربات در حال اجرا است...","timestamp":"14:08:09"}
+{"level":"debug","message":"Bot settings cached.","timestamp":"14:08:09"}

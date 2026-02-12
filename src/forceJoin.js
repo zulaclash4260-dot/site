@@ -111,6 +111,12 @@ async function evaluateUserSubscription(ctx, userId, requiredTargets) {
   for (const channel of requiredTargets) {
     const retryAt = unavailableForceJoinTargetsUntil.get(channel.id);
     if (retryAt && now < retryAt) {
+      // Channel is unavailable: treat user as NOT subscribed to prevent bypass
+      missingChannels.push(channel);
+      unavailableChannels.push({
+        ...channel,
+        unavailable_reason: "هنوز در دوره عدم دسترسی است",
+      });
       continue;
     }
     if (retryAt && now >= retryAt) {
@@ -135,6 +141,8 @@ async function evaluateUserSubscription(ctx, userId, requiredTargets) {
         logger.warn(
           `آیتم جوین اجباری ${channel.id} (${channel.title}) موقتاً از چک خارج شد: ${reason}`
         );
+        // Treat as missing to prevent bypass
+        missingChannels.push(channel);
         continue;
       }
 
@@ -380,8 +388,11 @@ async function notifyAdminAndRemoveChannel(ctx, channelInfo, actualCount) {
 
 /**
  * Register force join related callback handlers on the bot.
+ * @param {object} bot - The bot instance
+ * @param {Function} handleFileRequest - Handler for file requests
+ * @param {Function} onSubscriptionConfirmed - Called after subscription confirmed with no file (to show start content)
  */
-function registerForceJoinHandlers(bot, handleFileRequest) {
+function registerForceJoinHandlers(bot, handleFileRequest, onSubscriptionConfirmed) {
   bot.callbackQuery(/^check_sub:(.*)/, async (ctx) => {
     const fileIdentifier = ctx.match[1];
     const userId = ctx.from.id;
@@ -401,6 +412,8 @@ function registerForceJoinHandlers(bot, handleFileRequest) {
 
       if (fileIdentifier && fileIdentifier !== "no_file") {
         await handleFileRequest(ctx, fileIdentifier);
+      } else if (typeof onSubscriptionConfirmed === "function") {
+        await onSubscriptionConfirmed(ctx);
       } else {
         await ctx.reply("✅ عضویت شما با موفقیت تایید شد!");
       }
@@ -483,6 +496,8 @@ function registerForceJoinHandlers(bot, handleFileRequest) {
 
     if (fileIdentifier && fileIdentifier !== "no_file") {
       await handleFileRequest(ctx, fileIdentifier);
+    } else if (typeof onSubscriptionConfirmed === "function") {
+      await onSubscriptionConfirmed(ctx);
     } else {
       await ctx.reply("✅ عضویت شما با موفقیت تایید شد!");
     }
