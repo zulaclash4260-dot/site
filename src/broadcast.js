@@ -197,6 +197,36 @@ async function broadcastMessage(ctx, bot) {
               const { chat_id, message_id } =
                 ctx.session.broadcastMessageContent;
               await bot.api.forwardMessage(userId, chat_id, message_id);
+            } else if (messageType === "text") {
+              // For text messages, use sendMessage to explicitly preserve entities (hyperlinks, etc.)
+              const text = ctx.session.broadcastMessageContent;
+              const sendOptions = {};
+              if (copyOptions?.entities && copyOptions.entities.length > 0) {
+                sendOptions.entities = copyOptions.entities;
+              } else {
+                sendOptions.parse_mode = "Markdown";
+              }
+              if (copyOptions?.reply_markup) {
+                sendOptions.reply_markup = copyOptions.reply_markup;
+              }
+              try {
+                await bot.api.sendMessage(userId, text, sendOptions);
+              } catch (parseError) {
+                // If Markdown parsing fails, send as plain text with entities if available
+                if (
+                  sendOptions.parse_mode &&
+                  parseError.description &&
+                  parseError.description.includes("can't parse entities")
+                ) {
+                  const fallbackOptions = {};
+                  if (copyOptions?.reply_markup) {
+                    fallbackOptions.reply_markup = copyOptions.reply_markup;
+                  }
+                  await bot.api.sendMessage(userId, text, fallbackOptions);
+                } else {
+                  throw parseError;
+                }
+              }
             } else if (copyOptions) {
               await bot.api.copyMessage(
                 userId,

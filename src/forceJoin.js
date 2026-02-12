@@ -166,7 +166,7 @@ function buildJoinMessage(missingChannels, extraLinks) {
     "🔔 لطفاً ابتدا در کانال‌ها/گروه‌های زیر عضو شوید و سپس دکمه تایید را بزنید:\n\n";
 
   missingChannels.forEach((channel) => {
-    joinMessage += `- **${channel.title}**\n`;
+    joinMessage += `- *${channel.title}*\n`;
   });
 
   if (extraLinks.length > 0) {
@@ -350,20 +350,20 @@ async function notifyAdminAndRemoveChannel(ctx, channelInfo, actualCount) {
       : "کانال";
 
   const message = `
-🔔 **آیتم جوین اجباری حذف شد!** 🔔
+🔔 *آیتم جوین اجباری حذف شد!* 🔔
 تعداد کاربران عضو شده به حد نصاب رسید.
 
-**مشخصات:**
-- **عنوان:** ${channelInfo.title}
-- **نوع:** ${chatTypeText}
-- **شناسه:** \`${channelInfo.id}\`
-- **لینک دعوت:** ${channelInfo.invite_link}
-- **متن دکمه:** ${buttonText}
-- **نوع شرط:** ${
+*مشخصات:*
+- *عنوان:* ${channelInfo.title}
+- *نوع:* ${chatTypeText}
+- *شناسه:* \`${channelInfo.id}\`
+- *لینک دعوت:* ${channelInfo.invite_link}
+- *متن دکمه:* ${buttonText}
+- *نوع شرط:* ${
     channelInfo.condition?.type === "members" ? "بر اساس تعداد عضو" : "نامشخص"
   }
-- **حد نصاب تعیین شده:** ${channelInfo.condition?.limit} کاربر
-- **تعداد کاربران عضو شده:** ${currentCount} کاربر
+- *حد نصاب تعیین شده:* ${channelInfo.condition?.limit} کاربر
+- *تعداد کاربران عضو شده:* ${currentCount} کاربر
 `.trim();
 
   await runQuery("DELETE FROM force_join_channels WHERE id = ?", [
