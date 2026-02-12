@@ -1,0 +1,35 @@
+name: Run bot for 2 hours
+
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "Run duration (minutes)"
+        required: true
+        default: "120"
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 130
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          # IMPORTANT: do NOT use cache without a lock file
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run bot (auto-stop after N minutes)
+        env:
+          TOKEN: ${{ secrets.TOKEN }}
+          ADMIN_IDs: ${{ secrets.ADMIN_IDs }}
+        run: |
+          echo "Starting for ${{ inputs.minutes }} minutes..."
+          timeout $(( ${{ inputs.minutes }} * 60 ))s node index.js
