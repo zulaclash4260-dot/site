@@ -96,13 +96,17 @@ async function showFileList(ctx) {
     await ctx.answerCallbackQuery({ text: "هیچ فایلی ذخیره نشده است." });
     return;
   }
-  const counts = dbData.files.reduce((acc, file) => {
-    const type =
-      file.file_type ||
-      (Array.isArray(file.file_types) ? file.file_types[0] : "unknown");
-    acc[type] = (acc[type] || 0) + 1;
-    return acc;
-  }, {});
+  const counts = {};
+  for (const file of dbData.files) {
+    if (file.file_types && Array.isArray(file.file_types)) {
+      for (const type of file.file_types) {
+        counts[type] = (counts[type] || 0) + 1;
+      }
+    } else {
+      const type = file.file_type || (Array.isArray(file.file_types) ? file.file_types[0] : "unknown");
+      counts[type] = (counts[type] || 0) + 1;
+    }
+  }
   let message_text = "📊 آمار فایل‌ها:\n\n";
   const keyboard = new InlineKeyboard();
   for (const [type, count] of Object.entries(counts)) {
@@ -148,10 +152,10 @@ async function showForceJoinList(ctx) {
     return;
   }
 
-  let message = "📋 **لیست جوین اجباری:**\n\n";
+  let message = "📋 *لیست جوین اجباری:*\n\n";
 
   if (channels.length > 0) {
-    message += "📢 **کانال‌ها/گروه‌های اجباری (با چک عضویت):**\n\n";
+    message += "📢 *کانال‌ها/گروه‌های اجباری (با چک عضویت):*\n\n";
     for (let i = 0; i < channels.length; i++) {
       const ch = channels[i];
       const chatTypeText =
@@ -170,7 +174,7 @@ async function showForceJoinList(ctx) {
         conditionText = `حذف بعد از ${ch.condition.limit} عضو (فعلی: ${ch.condition.current_count})`;
       }
 
-      message += `${i + 1}. **${ch.title}**\n`;
+      message += `${i + 1}. *${ch.title}*\n`;
       message += `   🆔 شناسه: \`${ch.id}\`\n`;
       message += `   📌 نوع: ${chatTypeText} (${visibility})\n`;
       message += `   🔗 لینک: ${ch.invite_link}\n`;
@@ -180,14 +184,14 @@ async function showForceJoinList(ctx) {
   }
 
   if (extraLinks.length > 0) {
-    message += "🔗 **لینک‌های کمکی (بدون چک عضویت):**\n\n";
+    message += "🔗 *لینک‌های کمکی (بدون چک عضویت):*\n\n";
     for (let i = 0; i < extraLinks.length; i++) {
       const link = extraLinks[i];
       const btn =
         typeof link.button_text === "string" && link.button_text.trim()
           ? link.button_text.trim()
           : link.title || "لینک کمکی";
-      message += `${i + 1}. **${btn}**\n`;
+      message += `${i + 1}. *${btn}*\n`;
       message += `   🔗 ${link.invite_link}\n\n`;
     }
   }
@@ -277,7 +281,7 @@ async function showStatisticsMenu(ctx) {
   const uptimeSecs = uptimeSeconds % 60;
   const uptimeText = `${uptimeHours} ساعت و ${uptimeMinutes} دقیقه و ${uptimeSecs} ثانیه`;
 
-  const text = `📊 **آمار و وضعیت ربات:**
+  const text = `📊 *آمار و وضعیت ربات:*
 
 🟢 وضعیت: فعال
 ⏱ آپتایم: ${uptimeText}
@@ -303,14 +307,15 @@ async function showUserStats(ctx) {
   const dbData = await readDB();
   const totalUsers = dbData.users.length;
   const bannedUsers = dbData.bannedUsers.length;
-  const activeUsers = totalUsers - bannedUsers;
+  const bannedSet = new Set(dbData.bannedUsers);
+  const activeUsers = dbData.allUsersData.filter((u) => !bannedSet.has(u.id)).length;
   const dynamicAdmins = getDynamicAdmins();
   const totalAdmins = ADMIN_IDs.length + dynamicAdmins.length;
 
-  // Calculate users with activity
-  const activeLinkers = dbData.allUsersData.filter((u) => u.link_usage_count > 0).length;
-  const totalLinkUsage = dbData.allUsersData.reduce((sum, u) => sum + (u.link_usage_count || 0), 0);
-  const avgLinkUsage = totalUsers > 0 ? (totalLinkUsage / totalUsers).toFixed(1) : 0;
+  // Calculate actual download statistics from files table (reliable cumulative counter)
+  const totalDownloads = dbData.files.reduce((sum, f) => sum + (f.usage_count || 0), 0);
+  const avgDownloadsPerUser = totalUsers > 0 ? (totalDownloads / totalUsers).toFixed(1) : 0;
+  const totalFileEntries = dbData.files.length;
 
   // Registration timeline
   const now = Date.now();
@@ -319,22 +324,22 @@ async function showUserStats(ctx) {
   const last7d = usersWithDate.filter((u) => now - Number(u.created_at) < 7 * DAY_MS).length;
   const last30d = usersWithDate.filter((u) => now - Number(u.created_at) < 30 * DAY_MS).length;
 
-  let message = `📊 **آمار کاربران:**
+  let message = `📊 *آمار کاربران:*
 
-👤 کل کاربران: **${totalUsers}**
-✅ کاربران فعال (غیر مسدود): **${activeUsers}**
-🚫 کاربران مسدود شده: **${bannedUsers}**
-👑 تعداد ادمین‌ها: **${totalAdmins}**
+👤 کل کاربران: *${totalUsers}*
+✅ کاربران فعال (غیر مسدود): *${activeUsers}*
+🚫 کاربران مسدود شده: *${bannedUsers}*
+👑 تعداد ادمین‌ها: *${totalAdmins}*
 
-📅 **روند عضویت:**
-🕐 ۲۴ ساعت اخیر: **${last24h}** کاربر جدید
-📆 ۷ روز اخیر: **${last7d}** کاربر جدید
-🗓 ۳۰ روز اخیر: **${last30d}** کاربر جدید
+📅 *روند عضویت:*
+🕐 ۲۴ ساعت اخیر: *${last24h}* کاربر جدید
+📆 ۷ روز اخیر: *${last7d}* کاربر جدید
+🗓 ۳۰ روز اخیر: *${last30d}* کاربر جدید
 
-📈 **فعالیت کاربران:**
-🔗 کاربران با حداقل یک دانلود: **${activeLinkers}**
-📥 مجموع استفاده از لینک‌ها: **${totalLinkUsage}**
-📊 میانگین استفاده از لینک به ازای هر کاربر: **${avgLinkUsage}**`;
+📈 *فعالیت کلی:*
+📥 مجموع دانلودها: *${totalDownloads}*
+📊 میانگین دانلود به ازای هر کاربر: *${avgDownloadsPerUser}*
+🗂 تعداد لینک‌های فایل: *${totalFileEntries}*`;
 
   const keyboard = new InlineKeyboard().text(
     "⬅️ بازگشت به آمار",
@@ -345,40 +350,50 @@ async function showUserStats(ctx) {
 
 async function showFileStats(ctx) {
   const dbData = await readDB();
-  const totalFiles = dbData.files.length;
-  const counts = dbData.files.reduce((acc, file) => {
-    const type =
-      file.file_type ||
-      (Array.isArray(file.file_types) ? file.file_types[0] : "unknown");
-    acc[type] = (acc[type] || 0) + 1;
-    return acc;
-  }, {});
+  const totalEntries = dbData.files.length;
+
+  // Count individual files properly (including files within group entries)
+  const counts = {};
+  let totalIndividualFiles = 0;
+  for (const file of dbData.files) {
+    if (file.file_types && Array.isArray(file.file_types)) {
+      for (const type of file.file_types) {
+        counts[type] = (counts[type] || 0) + 1;
+        totalIndividualFiles++;
+      }
+    } else {
+      const type = file.file_type || "unknown";
+      counts[type] = (counts[type] || 0) + 1;
+      totalIndividualFiles++;
+    }
+  }
 
   const totalDownloads = dbData.files.reduce((sum, f) => sum + (f.usage_count || 0), 0);
-  const avgDownloads = totalFiles > 0 ? (totalDownloads / totalFiles).toFixed(1) : 0;
+  const avgDownloads = totalEntries > 0 ? (totalDownloads / totalEntries).toFixed(1) : 0;
   const mostDownloaded = dbData.files.reduce(
     (max, f) => ((f.usage_count || 0) > (max.usage_count || 0) ? f : max),
     { usage_count: 0 }
   );
   const groupFiles = dbData.files.filter((f) => f.file_ids && Array.isArray(f.file_ids)).length;
-  const singleFiles = totalFiles - groupFiles;
+  const singleFiles = totalEntries - groupFiles;
 
-  let message = `📊 **آمار فایل‌ها:**
+  let message = `📊 *آمار فایل‌ها:*
 
-📦 کل فایل‌های ذخیره شده: **${totalFiles}**
-📌 فایل‌های تکی: **${singleFiles}**
-📦 فایل‌های گروهی: **${groupFiles}**
+📦 کل لینک‌های ذخیره شده: *${totalEntries}*
+📁 کل فایل‌های منفرد: *${totalIndividualFiles}*
+📌 لینک‌های تکی: *${singleFiles}*
+📦 لینک‌های گروهی: *${groupFiles}*
 
-📥 **آمار دانلود:**
-📊 مجموع دانلودها: **${totalDownloads}**
-📈 میانگین دانلود هر فایل: **${avgDownloads}**
-🏆 بیشترین دانلود: **${mostDownloaded.usage_count || 0}** بار${
+📥 *آمار دانلود:*
+📊 مجموع دانلودها: *${totalDownloads}*
+📈 میانگین دانلود هر لینک: *${avgDownloads}*
+🏆 بیشترین دانلود: *${mostDownloaded.usage_count || 0}* بار${
     mostDownloaded.file_identifier
       ? ` (\`${mostDownloaded.file_identifier}\`)`
       : ""
   }
 
-📂 **تفکیک بر اساس نوع:**\n`;
+📂 *تفکیک بر اساس نوع:*\n`;
 
   for (const [type, count] of Object.entries(counts)) {
     const fileTypePersian =
@@ -389,8 +404,8 @@ async function showFileStats(ctx) {
         document: "📄 سند",
         unknown: "❓ نامشخص",
       }[type] || type;
-    const percentage = totalFiles > 0 ? ((count / totalFiles) * 100).toFixed(1) : 0;
-    message += `${fileTypePersian}: **${count}** عدد (${percentage}%)\n`;
+    const percentage = totalIndividualFiles > 0 ? ((count / totalIndividualFiles) * 100).toFixed(1) : 0;
+    message += `${fileTypePersian}: *${count}* عدد (${percentage}%)\n`;
   }
 
   const keyboard = new InlineKeyboard().text(
@@ -407,19 +422,18 @@ async function showForceJoinStats(ctx) {
     ? dbData.extraForceJoinLinks.length
     : 0;
 
-  const totalTrackedJoins = dbData.forceJoin.reduce(
-    (sum, ch) => sum + (ch.condition?.current_count || 0),
-    0
-  );
+  // Get actual total tracked joins from user_channel_joins table
+  const joinCountRow = getQuery("SELECT COUNT(*) AS total FROM user_channel_joins");
+  const totalTrackedJoins = joinCountRow ? joinCountRow.total : 0;
 
-  let message = `📊 **آمار جوین اجباری:**
+  let message = `📊 *آمار جوین اجباری:*
 
-➕ تعداد کل کانال‌ها/گروه‌های اجباری: **${totalForceJoinChannels}**
-🔗 تعداد لینک‌های کمکی بدون چک: **${totalExtraLinks}**
-👥 مجموع جوین‌های ثبت شده: **${totalTrackedJoins}**\n\n`;
+➕ تعداد کل کانال‌ها/گروه‌های اجباری: *${totalForceJoinChannels}*
+🔗 تعداد لینک‌های کمکی بدون چک: *${totalExtraLinks}*
+👥 مجموع جوین‌های ثبت شده: *${totalTrackedJoins}*\n\n`;
 
   if (totalForceJoinChannels > 0) {
-    message += `📢 **جزئیات کانال‌ها/گروه‌ها:**\n\n`;
+    message += `📢 *جزئیات کانال‌ها/گروه‌ها:*\n\n`;
     for (let i = 0; i < dbData.forceJoin.length; i++) {
       const channel = dbData.forceJoin[i];
       const chatTypeText =
@@ -434,35 +448,40 @@ async function showForceJoinStats(ctx) {
         const progress = channel.condition.limit > 0
           ? ((channel.condition.current_count / channel.condition.limit) * 100).toFixed(0)
           : 0;
-        conditionText = `حذف بعد از **${channel.condition.limit}** عضو (فعلی: **${channel.condition.current_count}** - ${progress}%)`;
+        conditionText = `حذف بعد از *${channel.condition.limit}* عضو (فعلی: *${channel.condition.current_count}* - ${progress}%)`;
       }
-      const currentCount = channel.condition?.current_count || 0;
+      // Get actual unique join count from user_channel_joins table
+      const channelJoinRow = getQuery(
+        "SELECT COUNT(*) AS cnt FROM user_channel_joins WHERE channel_id = ?",
+        [channel.id]
+      );
+      const currentCount = channelJoinRow ? channelJoinRow.cnt : 0;
 
       const buttonText =
         typeof channel.button_text === "string" && channel.button_text.trim()
           ? channel.button_text.trim()
           : `عضویت در ${channel.title}`;
-      message += `${i + 1}. **${channel.title}**\n`;
+      message += `${i + 1}. *${channel.title}*\n`;
       message += `   🆔 شناسه: \`${channel.id}\`\n`;
       message += `   📌 نوع: ${chatTypeText} (${visibility})\n`;
       message += `   🔗 لینک: ${channel.invite_link}\n`;
       message += `   🔘 متن دکمه: ${buttonText}\n`;
       message += `   ⚙️ شرط: ${conditionText}\n`;
-      message += `   👥 جوین منحصر به فرد: **${currentCount}** کاربر\n\n`;
+      message += `   👥 جوین منحصر به فرد: *${currentCount}* کاربر\n\n`;
     }
   } else {
     message += `فعلاً هیچ کانال/گروهی برای جوین اجباری ثبت نشده است.\n`;
   }
 
   if (totalExtraLinks > 0) {
-    message += `\n🔗 **لینک‌های کمکی (بدون چک):**\n\n`;
+    message += `\n🔗 *لینک‌های کمکی (بدون چک):*\n\n`;
     for (let i = 0; i < dbData.extraForceJoinLinks.length; i++) {
       const link = dbData.extraForceJoinLinks[i];
       const btn =
         typeof link.button_text === "string" && link.button_text.trim()
           ? link.button_text.trim()
           : link.title || "لینک کمکی";
-      message += `${i + 1}. **${btn}**: ${link.invite_link}\n`;
+      message += `${i + 1}. *${btn}*: ${link.invite_link}\n`;
     }
   }
 
@@ -494,7 +513,7 @@ async function showTop30Files(ctx) {
 
   await ctx.answerCallbackQuery();
 
-  let message_text = "🔝 **30 فایل پردانلود اخیر:**\n\n";
+  let message_text = "🔝 *30 فایل پردانلود اخیر:*\n\n";
   const botUsername = ctx.me.username;
 
   for (const file of files) {
@@ -526,15 +545,15 @@ async function showTop30Files(ctx) {
 }
 
 async function showAdminHelpGuide(ctx) {
-  const guideText = `📖 **راهنمای کامل پنل ادمین**
+  const guideText = `📖 *راهنمای کامل پنل ادمین*
 
-🔹 **ارسال همگانی** (📨)
+🔹 *ارسال همگانی* (📨)
 دو حالت دارد:
-• **ارسال پیام جدید**: پیام شما بدون برچسب فوروارد برای همه کاربران کپی و ارسال می‌شود. کپشن، فرمت و دکمه‌های شیشه‌ای حفظ می‌شوند.
-• **فوروارد پیام**: پیام با برچسب فوروارد ارسال می‌شود. توجه: اگر پیام از کانال خصوصی باشد ممکن است ارسال نشود.
+• *ارسال پیام جدید*: پیام شما بدون برچسب فوروارد برای همه کاربران کپی و ارسال می‌شود. کپشن، فرمت و دکمه‌های شیشه‌ای حفظ می‌شوند.
+• *فوروارد پیام*: پیام با برچسب فوروارد ارسال می‌شود. توجه: اگر پیام از کانال خصوصی باشد ممکن است ارسال نشود.
 ⚠️ ربات بصورت خودکار با تأخیر بهینه ارسال می‌کند تا از محدودیت تلگرام جلوگیری شود.
 
-🔹 **مدیریت جوین اجباری** (➕)
+🔹 *مدیریت جوین اجباری* (➕)
 • یک پیام از کانال/گروه فوروارد کنید یا لینک عمومی آن را ارسال کنید تا اضافه شود (چک عضویت انجام می‌شود).
 • ربات به طور خودکار نوع (کانال/گروه) و وضعیت (عمومی/خصوصی) را تشخیص می‌دهد.
 • لینک دعوت و متن دکمه عضویت را تنظیم کنید.
@@ -542,24 +561,24 @@ async function showAdminHelpGuide(ctx) {
 • می‌توانید لینک کمکی اضافه کنید که فقط نمایش داده می‌شود و چک عضویت ندارد.
 • از دکمه «📋 لیست جوین اجباری» برای مشاهده تمام آیتم‌های ثبت شده استفاده کنید.
 
-🔹 **مدیریت کاربران** (🚫)
-• **مسدود کردن**: شناسه عددی بفرستید یا پیامی از کاربر فوروارد کنید.
-• **رفع مسدودیت**: شناسه عددی کاربر را بفرستید.
-• **افزودن ادمین**: شناسه عددی کاربر را بفرستید تا ادمین شود.
-• **حذف ادمین**: از لیست ادمین‌ها انتخاب کنید.
-• **لیست ادمین‌ها**: مشاهده تمام ادمین‌های ربات.
+🔹 *مدیریت کاربران* (🚫)
+• *مسدود کردن*: شناسه عددی بفرستید یا پیامی از کاربر فوروارد کنید.
+• *رفع مسدودیت*: شناسه عددی کاربر را بفرستید.
+• *افزودن ادمین*: شناسه عددی کاربر را بفرستید تا ادمین شود.
+• *حذف ادمین*: از لیست ادمین‌ها انتخاب کنید.
+• *لیست ادمین‌ها*: مشاهده تمام ادمین‌های ربات.
 
-🔹 **آمار فایل‌ها** (📊)
+🔹 *آمار فایل‌ها* (📊)
 تعداد فایل‌ها به تفکیک نوع (عکس/ویدیو/آهنگ/سند) نمایش داده می‌شود.
 
-🔹 **دریافت لینک فایل** (⬆️)
-• **تکی**: یک فایل بفرستید، کپشن تنظیم کنید و لینک دریافت کنید.
-• **گروهی**: چند فایل بفرستید و یک لینک مشترک بسازید.
+🔹 *دریافت لینک فایل* (⬆️)
+• *تکی*: یک فایل بفرستید، کپشن تنظیم کنید و لینک دریافت کنید.
+• *گروهی*: چند فایل بفرستید و یک لینک مشترک بسازید.
 
-🔹 **حذف فایل با لینک** (🗑️)
+🔹 *حذف فایل با لینک* (🗑️)
 لینک اشتراک فایل را بفرستید تا از دیتابیس حذف شود.
 
-🔹 **تنظیمات پیشرفته** (⚙️)
+🔹 *تنظیمات پیشرفته* (⚙️)
 • متن کپشن پیش‌فرض
 • زمان حذف خودکار محتوا
 • متن بررسی اجباری
@@ -569,12 +588,12 @@ async function showAdminHelpGuide(ctx) {
 • کانال ذخیره فایل‌ها
 • سرعت ارسال همگانی (ایمن/متعادل/سریع)
 
-🔹 **آمار ربات** (📈)
+🔹 *آمار ربات* (📈)
 • آمار کاربران، فایل‌ها، جوین اجباری
 • آمار استفاده از لینک‌ها
 • ۳۰ فایل پردانلود
 
-🔹 **دستورات مفید**
+🔹 *دستورات مفید*
 • /cancel - لغو عملیات جاری
 • /skip - رد کردن کپشن
 • /done - اتمام آپلود گروهی
@@ -593,14 +612,14 @@ async function showAdminHelpGuide(ctx) {
 async function showAdminList(ctx) {
   const dynamicAdmins = getDynamicAdmins();
 
-  let message = `👑 **لیست ادمین‌های ربات:**\n\n`;
-  message += `🔒 **ادمین‌های اصلی (غیرقابل حذف):**\n`;
+  let message = `👑 *لیست ادمین‌های ربات:*\n\n`;
+  message += `🔒 *ادمین‌های اصلی (غیرقابل حذف):*\n`;
   for (const id of ADMIN_IDs) {
     message += `• \`${id}\`\n`;
   }
 
   if (dynamicAdmins.length > 0) {
-    message += `\n🔓 **ادمین‌های افزوده شده:**\n`;
+    message += `\n🔓 *ادمین‌های افزوده شده:*\n`;
     for (const id of dynamicAdmins) {
       message += `• \`${id}\`\n`;
     }
@@ -608,7 +627,7 @@ async function showAdminList(ctx) {
     message += `\nهیچ ادمین اضافی ثبت نشده است.`;
   }
 
-  message += `\n\n📊 مجموع ادمین‌ها: **${ADMIN_IDs.length + dynamicAdmins.length}**`;
+  message += `\n\n📊 مجموع ادمین‌ها: *${ADMIN_IDs.length + dynamicAdmins.length}*`;
 
   const keyboard = new InlineKeyboard()
     .text("👑 افزودن ادمین", "add_admin_start")
