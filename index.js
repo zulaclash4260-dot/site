@@ -1242,7 +1242,7 @@ bot.callbackQuery("broadcast_choose_send", async (ctx) => {
 bot.callbackQuery("broadcast_choose_forward", async (ctx) => {
   ctx.session.step = "awaiting_broadcast_message_forward";
   const text =
-    "✅ حالت «فوروارد پیام» فعال شد.\n\nلطفاً پیام مورد نظر خود را برای فوروارد همگانی، فوروارد کنید.\n\n**توجه: تمامی جزئیات پیام دقیقاً مانند پیام اصلی فوروارد خواهد شد.**\n\n⚠️ اگر پیام از یک کانال خصوصی فوروارد شود که ربات به آن دسترسی ندارد، ممکن است عملیات فوروارد با شکست مواجه شود.\n\nبرای لغو /cancel را ارسال کنید.";
+    "✅ حالت «فوروارد پیام» فعال شد.\n\nلطفاً پیام مورد نظر خود را برای فوروارد همگانی، فوروارد کنید.\n\n*توجه: تمامی جزئیات پیام دقیقاً مانند پیام اصلی فوروارد خواهد شد.*\n\n⚠️ اگر پیام از یک کانال خصوصی فوروارد شود که ربات به آن دسترسی ندارد، ممکن است عملیات فوروارد با شکست مواجه شود.\n\nبرای لغو /cancel را ارسال کنید.";
   const keyboard = new InlineKeyboard().text("⬅️ بازگشت", "admin_panel_main");
   await safeEditOrReply(ctx, text, keyboard);
   logger.info(

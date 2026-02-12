@@ -103,7 +103,7 @@ async function showFileList(ctx) {
         counts[type] = (counts[type] || 0) + 1;
       }
     } else {
-      const type = file.file_type || (Array.isArray(file.file_types) ? file.file_types[0] : "unknown");
+      const type = file.file_type || "unknown";
       counts[type] = (counts[type] || 0) + 1;
     }
   }
