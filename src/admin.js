@@ -268,7 +268,22 @@ async function showAdvancedSettingsMenu(ctx) {
 }
 
 async function showStatisticsMenu(ctx) {
-  const text = "📊 لطفاً نوع آماری که می‌خواهید مشاهده کنید را انتخاب کنید:";
+  const pingMs = await measureApiPing(ctx);
+  const pingText = pingMs !== null ? `${pingMs}ms` : "نامشخص";
+
+  const uptimeSeconds = Math.floor(process.uptime());
+  const uptimeHours = Math.floor(uptimeSeconds / 3600);
+  const uptimeMinutes = Math.floor((uptimeSeconds % 3600) / 60);
+  const uptimeSecs = uptimeSeconds % 60;
+  const uptimeText = `${uptimeHours} ساعت و ${uptimeMinutes} دقیقه و ${uptimeSecs} ثانیه`;
+
+  const text = `📊 **آمار و وضعیت ربات:**
+
+🟢 وضعیت: فعال
+⏱ آپتایم: ${uptimeText}
+🏓 پینگ API: ${pingText}
+
+لطفاً نوع آماری که می‌خواهید مشاهده کنید را انتخاب کنید:`;
   const keyboard = new InlineKeyboard()
     .text("👥 آمار کاربران", "show_user_stats")
     .row()
@@ -281,7 +296,7 @@ async function showStatisticsMenu(ctx) {
     .text("🔝 30 فایل برتر", "show_top_30_files")
     .row()
     .text("⬅️ بازگشت", "admin_panel_main");
-  await safeEditOrReply(ctx, text, keyboard);
+  await safeEditOrReply(ctx, text, keyboard, { parse_mode: "Markdown" });
 }
 
 async function showUserStats(ctx) {
@@ -297,12 +312,24 @@ async function showUserStats(ctx) {
   const totalLinkUsage = dbData.allUsersData.reduce((sum, u) => sum + (u.link_usage_count || 0), 0);
   const avgLinkUsage = totalUsers > 0 ? (totalLinkUsage / totalUsers).toFixed(1) : 0;
 
+  // Registration timeline
+  const now = Date.now();
+  const usersWithDate = dbData.allUsersData.filter((u) => u.created_at && Number(u.created_at) > 0);
+  const last24h = usersWithDate.filter((u) => now - Number(u.created_at) < DAY_MS).length;
+  const last7d = usersWithDate.filter((u) => now - Number(u.created_at) < 7 * DAY_MS).length;
+  const last30d = usersWithDate.filter((u) => now - Number(u.created_at) < 30 * DAY_MS).length;
+
   let message = `📊 **آمار کاربران:**
 
 👤 کل کاربران: **${totalUsers}**
 ✅ کاربران فعال (غیر مسدود): **${activeUsers}**
 🚫 کاربران مسدود شده: **${bannedUsers}**
 👑 تعداد ادمین‌ها: **${totalAdmins}**
+
+📅 **روند عضویت:**
+🕐 ۲۴ ساعت اخیر: **${last24h}** کاربر جدید
+📆 ۷ روز اخیر: **${last7d}** کاربر جدید
+🗓 ۳۰ روز اخیر: **${last30d}** کاربر جدید
 
 📈 **فعالیت کاربران:**
 🔗 کاربران با حداقل یک دانلود: **${activeLinkers}**
@@ -380,17 +407,34 @@ async function showForceJoinStats(ctx) {
     ? dbData.extraForceJoinLinks.length
     : 0;
 
-  let message = `📊 آمار جوین اجباری:
-    
-    ➕ تعداد کل کانال‌ها/گروه‌های جوین اجباری: ${totalForceJoinChannels}
-    🔗 تعداد لینک‌های کمکی بدون چک: ${totalExtraLinks}\n\n`;
+  const totalTrackedJoins = dbData.forceJoin.reduce(
+    (sum, ch) => sum + (ch.condition?.current_count || 0),
+    0
+  );
+
+  let message = `📊 **آمار جوین اجباری:**
+
+➕ تعداد کل کانال‌ها/گروه‌های اجباری: **${totalForceJoinChannels}**
+🔗 تعداد لینک‌های کمکی بدون چک: **${totalExtraLinks}**
+👥 مجموع جوین‌های ثبت شده: **${totalTrackedJoins}**\n\n`;
 
   if (totalForceJoinChannels > 0) {
-    message += `جزئیات کانال‌ها:\n`;
-    for (const channel of dbData.forceJoin) {
+    message += `📢 **جزئیات کانال‌ها/گروه‌ها:**\n\n`;
+    for (let i = 0; i < dbData.forceJoin.length; i++) {
+      const channel = dbData.forceJoin[i];
+      const chatTypeText =
+        channel.chat_type === "supergroup" || channel.chat_type === "group"
+          ? "گروه"
+          : "کانال";
+      const visibility = channel.invite_link && channel.invite_link.includes("/+")
+        ? "خصوصی 🔒"
+        : "عمومی 🌐";
       let conditionText = "بدون شرط حذف خودکار";
       if (channel.condition) {
-        conditionText = `حذف بعد از **${channel.condition.limit}** عضو جدید (فعلی: **${channel.condition.current_count}**)`;
+        const progress = channel.condition.limit > 0
+          ? ((channel.condition.current_count / channel.condition.limit) * 100).toFixed(0)
+          : 0;
+        conditionText = `حذف بعد از **${channel.condition.limit}** عضو (فعلی: **${channel.condition.current_count}** - ${progress}%)`;
       }
       const currentCount = channel.condition?.current_count || 0;
 
@@ -398,24 +442,27 @@ async function showForceJoinStats(ctx) {
         typeof channel.button_text === "string" && channel.button_text.trim()
           ? channel.button_text.trim()
           : `عضویت در ${channel.title}`;
-      message += `- **${channel.title}** (شناسه: \`${channel.id}\`)\n  نوع: ${
-        channel.chat_type === "supergroup" || channel.chat_type === "group"
-          ? "گروه"
-          : "کانال"
-      }\n  لینک: ${channel.invite_link}\n  متن دکمه: ${buttonText}\n  ${conditionText}\n  تعداد جوین منحصر به فرد (تایید شده توسط ربات): **${currentCount}** کاربر\n\n`;
+      message += `${i + 1}. **${channel.title}**\n`;
+      message += `   🆔 شناسه: \`${channel.id}\`\n`;
+      message += `   📌 نوع: ${chatTypeText} (${visibility})\n`;
+      message += `   🔗 لینک: ${channel.invite_link}\n`;
+      message += `   🔘 متن دکمه: ${buttonText}\n`;
+      message += `   ⚙️ شرط: ${conditionText}\n`;
+      message += `   👥 جوین منحصر به فرد: **${currentCount}** کاربر\n\n`;
     }
   } else {
-    message += `فعلاً هیچ کانال/گروهی برای جوین اجباری ثبت نشده است.`;
+    message += `فعلاً هیچ کانال/گروهی برای جوین اجباری ثبت نشده است.\n`;
   }
 
   if (totalExtraLinks > 0) {
-    message += `\n🔗 **لینک‌های کمکی (بدون چک):**\n`;
-    for (const link of dbData.extraForceJoinLinks) {
+    message += `\n🔗 **لینک‌های کمکی (بدون چک):**\n\n`;
+    for (let i = 0; i < dbData.extraForceJoinLinks.length; i++) {
+      const link = dbData.extraForceJoinLinks[i];
       const btn =
         typeof link.button_text === "string" && link.button_text.trim()
           ? link.button_text.trim()
           : link.title || "لینک کمکی";
-      message += `- ${btn}: ${link.invite_link}\n`;
+      message += `${i + 1}. **${btn}**: ${link.invite_link}\n`;
     }
   }
 

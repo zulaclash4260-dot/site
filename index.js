@@ -139,7 +139,15 @@ registerMiddleware(bot);
 const adminBot = bot.filter(isAdmin);
 
 // --- Register Force Join Handlers (single check_sub handler, no duplicates) ---
-registerForceJoinHandlers(bot, handleFileRequest);
+registerForceJoinHandlers(bot, handleFileRequest, async (ctx) => {
+  await ctx.reply("✅ عضویت شما با موفقیت تایید شد!");
+  if (isAdmin(ctx)) {
+    await showMainAdminPanel(ctx);
+  } else {
+    const dbData = await readDB();
+    await ctx.reply(buildRegularUserChannelText(dbData.settings));
+  }
+});
 
 // --- Force View Confirmation ---
 bot.callbackQuery(/^confirm_force_view:(.*)/, async (ctx) => {
