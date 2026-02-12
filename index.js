@@ -10,6 +10,7 @@ const {
   promptForSend,
   showFileList,
   showAddChannelMenu,
+  showForceJoinList,
   showAdvancedSettingsMenu,
   showStatisticsMenu,
   showUserStats,
@@ -521,7 +522,7 @@ bot.on("message", async (ctx) => {
 
   if (step === "awaiting_channel_info") {
     ctx.session.step = "idle";
-    let chatId, chatTitle, chatType;
+    let chatId, chatTitle, chatType, detectedInviteLink;
     try {
       if (ctx.message.forward_from_chat) {
         const chat = ctx.message.forward_from_chat;
@@ -531,9 +532,70 @@ bot.on("message", async (ctx) => {
         logger.info(
           `اطلاعات کانال/گروه دریافت شد: ${chatTitle} (${chatId}).`
         );
+      } else if (ctx.message.text) {
+        const rawText = ctx.message.text.trim();
+        const linkMatch = rawText.match(/^https?:\/\/t\.me\/(\+[\w-]+|[a-zA-Z][\w]{3,})$/i);
+        const usernameMatch = rawText.match(/^@([a-zA-Z][\w]{3,})$/);
+
+        if (linkMatch || usernameMatch) {
+          let chatIdentifier;
+          let isPrivateLink = false;
+
+          if (linkMatch) {
+            const pathPart = linkMatch[1];
+            if (pathPart.startsWith("+")) {
+              isPrivateLink = true;
+              chatIdentifier = rawText;
+              detectedInviteLink = rawText.replace(/^http:\/\//i, "https://");
+            } else {
+              chatIdentifier = `@${pathPart}`;
+              detectedInviteLink = `https://t.me/${pathPart}`;
+            }
+          } else {
+            chatIdentifier = `@${usernameMatch[1]}`;
+            detectedInviteLink = `https://t.me/${usernameMatch[1]}`;
+          }
+
+          if (isPrivateLink) {
+            return ctx.reply(
+              "❌ لینک خصوصی (invite link) به صورت مستقیم قابل شناسایی نیست.\n\n" +
+              "لطفاً یک پیام از آن کانال/گروه خصوصی فوروارد کنید تا ربات بتواند آن را شناسایی کند."
+            );
+          }
+
+          try {
+            const chatInfo = await ctx.api.getChat(chatIdentifier);
+            chatId = chatInfo.id;
+            chatTitle = chatInfo.title || chatIdentifier;
+            chatType = chatInfo.type;
+            detectedInviteLink = detectedInviteLink || chatInfo.invite_link;
+            logger.info(
+              `اطلاعات کانال/گروه از لینک دریافت شد: ${chatTitle} (${chatId}) - نوع: ${chatType}`
+            );
+          } catch (apiError) {
+            logger.warn(`خطا در دریافت اطلاعات از لینک ${rawText}: ${apiError.message}`);
+            return ctx.reply(
+              "❌ ربات نتوانست اطلاعات این کانال/گروه را دریافت کند.\n\n" +
+              "مطمئن شوید که:\n" +
+              "1. ربات در کانال/گروه ادمین است\n" +
+              "2. لینک یا نام کاربری صحیح است\n\n" +
+              "همچنین می‌توانید یک پیام از کانال/گروه فوروارد کنید."
+            );
+          }
+        } else {
+          return ctx.reply(
+            "❌ ورودی نامعتبر است.\n\nلطفاً یکی از موارد زیر را ارسال کنید:\n" +
+            "• یک پیام از کانال/گروه فوروارد کنید\n" +
+            "• لینک عمومی کانال/گروه (مثل https://t.me/channel_name)\n" +
+            "• نام کاربری کانال/گروه (مثل @channel_name)"
+          );
+        }
       } else {
         return ctx.reply(
-          "❌ ورودی نامعتبر است. لطفاً فقط یک پیام از کانال یا گروه مورد نظر فوروارد کنید."
+          "❌ ورودی نامعتبر است.\n\nلطفاً یکی از موارد زیر را ارسال کنید:\n" +
+          "• یک پیام از کانال/گروه فوروارد کنید\n" +
+          "• لینک عمومی کانال/گروه (مثل https://t.me/channel_name)\n" +
+          "• نام کاربری کانال/گروه (مثل @channel_name)"
         );
       }
 
@@ -547,12 +609,30 @@ bot.on("message", async (ctx) => {
         title: chatTitle,
         chatType: chatType || "channel",
       };
-      ctx.session.step = "awaiting_invite_link";
-      await ctx.reply(
-        `کانال/گروه "${chatTitle}" شناسایی شد. لطفاً لینک دعوت آن را برای نمایش به کاربران ارسال کنید.\n\nبرای لغو /cancel را ارسال کنید.`
-      );
+
+      if (detectedInviteLink) {
+        ctx.session.pendingChannel.invite_link = detectedInviteLink;
+        ctx.session.step = "awaiting_channel_button_text";
+
+        const chatTypeText =
+          chatType === "group" || chatType === "supergroup" ? "گروه" : "کانال";
+        const visibilityText = detectedInviteLink.includes("/+")
+          ? "خصوصی 🔒"
+          : "عمومی 🌐";
+
+        await ctx.reply(
+          `✅ ${chatTypeText} "${chatTitle}" شناسایی شد. (${visibilityText})\n\n` +
+          `لینک: ${detectedInviteLink}\n\n` +
+          `حالا متن دکمه جوین اجباری را ارسال کنید.\n\nبرای متن پیش‌فرض عبارت \`default\` را بفرستید.\nبرای لغو /cancel را ارسال کنید.`
+        );
+      } else {
+        ctx.session.step = "awaiting_invite_link";
+        await ctx.reply(
+          `کانال/گروه "${chatTitle}" شناسایی شد. لطفاً لینک دعوت آن را برای نمایش به کاربران ارسال کنید.\n\nبرای لغو /cancel را ارسال کنید.`
+        );
+      }
     } catch (error) {
-      logger.error("خطا در پردازش کانال فوروارد شده:", error);
+      logger.error("خطا در پردازش کانال:", error);
       await ctx.reply(
         "❌ خطا در دریافت اطلاعات. لطفاً از صحت ورودی اطمینان حاصل کنید."
       );
@@ -1056,6 +1136,7 @@ bot.callbackQuery("show_top_30_files", showTop30Files);
 bot.callbackQuery("admin_help_guide", showAdminHelpGuide);
 bot.callbackQuery("list_admins", showAdminList);
 bot.callbackQuery("remove_admin_start", showRemoveAdminMenu);
+bot.callbackQuery("list_force_join_channels", showForceJoinList);
 
 bot.callbackQuery("add_admin_start", async (ctx) => {
   if (!isPrimaryAdmin(ctx)) {
@@ -1159,7 +1240,7 @@ bot.callbackQuery("broadcast_choose_forward", async (ctx) => {
 bot.callbackQuery("add_channel_start", async (ctx) => {
   ctx.session.step = "awaiting_channel_info";
   const text =
-    "یک پیام از کانال/گروه مورد نظر فوروارد کنید.\n\nتوجه: برای چک عضویت، ربات باید در آن کانال/گروه دسترسی بررسی عضو داشته باشد.\n\nبرای لغو /cancel را ارسال کنید.";
+    "یک پیام از کانال/گروه مورد نظر فوروارد کنید یا لینک آن را ارسال کنید.\n\nمثال لینک عمومی: https://t.me/channel_name\nمثال لینک خصوصی: https://t.me/+AbCdEfGh\n\nتوجه: برای چک عضویت، ربات باید در آن کانال/گروه ادمین باشد.\n\nبرای لغو /cancel را ارسال کنید.";
   await safeEditOrReply(ctx, text);
 });
 
@@ -1178,16 +1259,18 @@ bot.callbackQuery("remove_channel_start", async (ctx) => {
       await ctx.answerCallbackQuery({
         text: "هیچ کانال/گروه اجباری برای حذف وجود ندارد.",
       });
+      const keyboard = new InlineKeyboard().text("⬅️ بازگشت", "admin_add_channel");
       return await safeEditOrReply(
         ctx,
         "هیچ کانال/گروه اجباری برای حذف وجود ندارد.",
-        null
+        keyboard
       );
     }
     const keyboard = new InlineKeyboard();
     dbData.forceJoin.forEach((channel) => {
       keyboard.text(`❌ ${channel.title}`, `remove_ch_${channel.id}`).row();
     });
+    keyboard.text("⬅️ بازگشت", "admin_add_channel");
     const text =
       "کدام کانال/گروه را می‌خواهید از لیست جوین اجباری حذف کنید؟";
     await safeEditOrReply(ctx, text, keyboard);
@@ -1263,12 +1346,12 @@ bot.callbackQuery(/^remove_ch_/, async (ctx) => {
 
     if (result.changes > 0) {
       await ctx.answerCallbackQuery({ text: `مورد با موفقیت حذف شد.` });
-      await safeEditOrReply(ctx, `✅ مورد مورد نظر با موفقیت از لیست حذف شد.`);
       logger.info(`کانال جوین اجباری ${channelId} و اطلاعات جوین آن حذف شد.`);
     } else {
       await ctx.answerCallbackQuery({ text: "خطا: مورد یافت نشد." });
       logger.warn(`تلاش برای حذف کانال جوین اجباری ناموجود ${channelId}.`);
     }
+    await showAddChannelMenu(ctx);
   } catch (e) {
     logger.error(`خطا در حذف کانال جوین اجباری ${channelId}:`, e);
     await ctx.answerCallbackQuery({
@@ -1288,7 +1371,6 @@ bot.callbackQuery(/^remove_extra_link_(\d+)$/, async (ctx) => {
 
     if (result.changes > 0) {
       await ctx.answerCallbackQuery({ text: "لینک کمکی با موفقیت حذف شد." });
-      await safeEditOrReply(ctx, "✅ لینک کمکی با موفقیت حذف شد.");
       logger.info(`لینک کمکی ${linkId} حذف شد.`);
     } else {
       await ctx.answerCallbackQuery({
@@ -1296,6 +1378,7 @@ bot.callbackQuery(/^remove_extra_link_(\d+)$/, async (ctx) => {
         show_alert: true,
       });
     }
+    await showAddChannelMenu(ctx);
   } catch (e) {
     logger.error(`خطا در حذف لینک کمکی ${linkId}:`, e);
     await ctx.answerCallbackQuery({
