@@ -122,14 +122,84 @@ async function showAddChannelMenu(ctx) {
     .row()
     .text("➖ حذف کانال/گروه اجباری", "remove_channel_start")
     .row()
+    .text("📋 لیست جوین اجباری", "list_force_join_channels")
+    .row()
     .text("🔗 افزودن لینک کمکی (بدون چک)", "add_extra_link_start")
     .row()
     .text("🗑️ حذف لینک کمکی (بدون چک)", "remove_extra_link_start")
     .row()
     .text("⬅️ بازگشت", "admin_panel_main");
   const text =
-    "برای افزودن اجباری، یک پیام از کانال/گروه فوروارد کنید تا عضویت کاربر چک شود.\n\nبرای لینک کمکی، فقط دکمه لینک اضافه می‌شود و چک عضویت انجام نمی‌شود.";
+    "برای افزودن اجباری، یک پیام از کانال/گروه فوروارد کنید یا لینک کانال/گروه (مثل https://t.me/username) را ارسال کنید.\n\nبرای لینک کمکی، فقط دکمه لینک اضافه می‌شود و چک عضویت انجام نمی‌شود.";
   await safeEditOrReply(ctx, text, keyboard);
+}
+
+async function showForceJoinList(ctx) {
+  const dbData = await readDB();
+  const channels = dbData.forceJoin;
+  const extraLinks = dbData.extraForceJoinLinks;
+
+  if (channels.length === 0 && extraLinks.length === 0) {
+    const keyboard = new InlineKeyboard()
+      .text("➕ افزودن کانال/گروه اجباری", "add_channel_start")
+      .row()
+      .text("⬅️ بازگشت", "admin_add_channel");
+    await safeEditOrReply(ctx, "📋 هیچ آیتم جوین اجباری ثبت نشده است.", keyboard);
+    return;
+  }
+
+  let message = "📋 **لیست جوین اجباری:**\n\n";
+
+  if (channels.length > 0) {
+    message += "📢 **کانال‌ها/گروه‌های اجباری (با چک عضویت):**\n\n";
+    for (let i = 0; i < channels.length; i++) {
+      const ch = channels[i];
+      const chatTypeText =
+        ch.chat_type === "group" || ch.chat_type === "supergroup"
+          ? "گروه"
+          : "کانال";
+      const visibility = ch.invite_link && ch.invite_link.includes("/+")
+        ? "خصوصی 🔒"
+        : "عمومی 🌐";
+      const buttonText =
+        typeof ch.button_text === "string" && ch.button_text.trim()
+          ? ch.button_text.trim()
+          : `عضویت در ${ch.title}`;
+      let conditionText = "بدون شرط حذف خودکار";
+      if (ch.condition) {
+        conditionText = `حذف بعد از ${ch.condition.limit} عضو (فعلی: ${ch.condition.current_count})`;
+      }
+
+      message += `${i + 1}. **${ch.title}**\n`;
+      message += `   🆔 شناسه: \`${ch.id}\`\n`;
+      message += `   📌 نوع: ${chatTypeText} (${visibility})\n`;
+      message += `   🔗 لینک: ${ch.invite_link}\n`;
+      message += `   🔘 متن دکمه: ${buttonText}\n`;
+      message += `   ⚙️ شرط: ${conditionText}\n\n`;
+    }
+  }
+
+  if (extraLinks.length > 0) {
+    message += "🔗 **لینک‌های کمکی (بدون چک عضویت):**\n\n";
+    for (let i = 0; i < extraLinks.length; i++) {
+      const link = extraLinks[i];
+      const btn =
+        typeof link.button_text === "string" && link.button_text.trim()
+          ? link.button_text.trim()
+          : link.title || "لینک کمکی";
+      message += `${i + 1}. **${btn}**\n`;
+      message += `   🔗 ${link.invite_link}\n\n`;
+    }
+  }
+
+  message += `\n📊 مجموع: ${channels.length} آیتم اجباری، ${extraLinks.length} لینک کمکی`;
+
+  const keyboard = new InlineKeyboard()
+    .text("➕ افزودن", "add_channel_start")
+    .text("➖ حذف", "remove_channel_start")
+    .row()
+    .text("⬅️ بازگشت", "admin_add_channel");
+  await safeEditOrReply(ctx, message, keyboard, { parse_mode: "Markdown" });
 }
 
 async function showAdvancedSettingsMenu(ctx) {
@@ -418,10 +488,12 @@ async function showAdminHelpGuide(ctx) {
 ⚠️ ربات بصورت خودکار با تأخیر بهینه ارسال می‌کند تا از محدودیت تلگرام جلوگیری شود.
 
 🔹 **مدیریت جوین اجباری** (➕)
-• یک پیام از کانال/گروه فوروارد کنید تا اضافه شود (چک عضویت انجام می‌شود).
+• یک پیام از کانال/گروه فوروارد کنید یا لینک عمومی آن را ارسال کنید تا اضافه شود (چک عضویت انجام می‌شود).
+• ربات به طور خودکار نوع (کانال/گروه) و وضعیت (عمومی/خصوصی) را تشخیص می‌دهد.
 • لینک دعوت و متن دکمه عضویت را تنظیم کنید.
 • شرط حذف خودکار بر اساس تعداد عضو قابل تنظیم است.
 • می‌توانید لینک کمکی اضافه کنید که فقط نمایش داده می‌شود و چک عضویت ندارد.
+• از دکمه «📋 لیست جوین اجباری» برای مشاهده تمام آیتم‌های ثبت شده استفاده کنید.
 
 🔹 **مدیریت کاربران** (🚫)
 • **مسدود کردن**: شناسه عددی بفرستید یا پیامی از کاربر فوروارد کنید.
@@ -523,6 +595,7 @@ module.exports = {
   promptForSend,
   showFileList,
   showAddChannelMenu,
+  showForceJoinList,
   showAdvancedSettingsMenu,
   showStatisticsMenu,
   showUserStats,
