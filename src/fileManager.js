@@ -289,20 +289,15 @@ async function handleFileRequest(ctx, fileIdentifier, sourceMessageId = null) {
       currentLinkUsage === 3 ||
       (currentLinkUsage > 1 && (currentLinkUsage - 1) % 5 === 0)
     ) {
-      const FORCE_VIEW_WAIT_SECONDS = 10;
       const keyboard = new InlineKeyboard();
       keyboard.text(
         "✅ تایید بازدید و ریکشن",
         `confirm_force_view:${fileIdentifier}`
       );
 
-      const forceViewText =
-        dbData.settings.force_view_message_text +
-        `\n\n⏳ پس از ${FORCE_VIEW_WAIT_SECONDS} ثانیه بررسی، دکمه «تایید بازدید و ریکشن» را بزنید تا فایل ارسال شود.`;
-
       try {
         const sentMessage = await ctx.reply(
-          forceViewText,
+          dbData.settings.force_view_message_text,
           { reply_markup: keyboard }
         );
         if (Number.isInteger(pendingStartMessageId)) {
