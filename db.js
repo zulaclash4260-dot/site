@@ -1,70 +1,32 @@
-const fs = require("fs");
 const path = require("path");
-const initSqlJs = require("sql.js");
-const winston = require("winston");
-
-// Configure Winston Logger for db.js
-const logger = winston.createLogger({
-  level: "debug",
-  format: winston.format.combine(
-    winston.format.timestamp({ format: "HH:mm:ss" }),
-    winston.format.errors({ stack: true }),
-    winston.format.splat(),
-    winston.format.json()
-  ),
-  transports: [
-    new winston.transports.Console({
-      level: "error",
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.printf(
-          ({ level, message, timestamp, stack }) =>
-            `${timestamp} ${level}: ${message}${stack ? `\n${stack}` : ""}`
-        )
-      ),
-    }),
-    new winston.transports.File({ filename: "bot.log" }),
-  ],
-});
+const Database = require("better-sqlite3");
+const { logger } = require("./src/config");
 
 const DB_FILE = path.join(__dirname, "database.sqlite");
 
 let db;
 let cachedSettings = null;
 
-function persistDatabase() {
-  const data = db.export();
-  fs.writeFileSync(DB_FILE, Buffer.from(data));
-}
-
 async function initializeDatabase() {
   try {
-    const SQL = await initSqlJs({
-      locateFile: (file) => path.join(__dirname, "node_modules", "sql.js", "dist", file),
-    });
-
-    if (fs.existsSync(DB_FILE)) {
-      const fileBuffer = fs.readFileSync(DB_FILE);
-      db = new SQL.Database(fileBuffer);
-    } else {
-      db = new SQL.Database();
-    }
+    db = new Database(DB_FILE);
+    db.pragma("journal_mode = WAL");
 
     logger.info("Connected to SQLite database.");
 
-    db.run(`CREATE TABLE IF NOT EXISTS settings (
+    db.exec(`CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT
     )`);
-    db.run(`CREATE TABLE IF NOT EXISTS users (
+    db.exec(`CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY,
       link_usage_count INTEGER DEFAULT 0,
       created_at INTEGER DEFAULT 0
     )`);
-    db.run(`CREATE TABLE IF NOT EXISTS banned_users (
+    db.exec(`CREATE TABLE IF NOT EXISTS banned_users (
       id INTEGER PRIMARY KEY
     )`);
-    db.run(`CREATE TABLE IF NOT EXISTS force_join_channels (
+    db.exec(`CREATE TABLE IF NOT EXISTS force_join_channels (
       id INTEGER PRIMARY KEY,
       title TEXT,
       invite_link TEXT,
@@ -74,13 +36,13 @@ async function initializeDatabase() {
       condition_limit INTEGER,
       current_members_count INTEGER DEFAULT 0
     )`);
-    db.run(`CREATE TABLE IF NOT EXISTS force_join_extra_links (
+    db.exec(`CREATE TABLE IF NOT EXISTS force_join_extra_links (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT,
       invite_link TEXT,
       button_text TEXT
     )`);
-    db.run(`CREATE TABLE IF NOT EXISTS files (
+    db.exec(`CREATE TABLE IF NOT EXISTS files (
       file_identifier TEXT PRIMARY KEY,
       file_id TEXT,
       file_type TEXT,
@@ -91,54 +53,39 @@ async function initializeDatabase() {
       usage_count INTEGER DEFAULT 0
     )`);
 
-    try {
-      db.run("ALTER TABLE force_join_channels ADD COLUMN current_members_count INTEGER DEFAULT 0");
-    } catch (err) {
-      if (!String(err.message).includes("duplicate column name")) {
-        logger.warn("Warning while adding current_members_count:", err.message);
+    const alterStatements = [
+      { sql: "ALTER TABLE force_join_channels ADD COLUMN current_members_count INTEGER DEFAULT 0", name: "current_members_count" },
+      { sql: "ALTER TABLE force_join_channels ADD COLUMN button_text TEXT", name: "button_text" },
+      { sql: "ALTER TABLE force_join_channels ADD COLUMN chat_type TEXT DEFAULT 'channel'", name: "chat_type" },
+      { sql: "ALTER TABLE files ADD COLUMN usage_count INTEGER DEFAULT 0", name: "usage_count" },
+      { sql: "ALTER TABLE users ADD COLUMN created_at INTEGER DEFAULT 0", name: "users.created_at" },
+    ];
+
+    for (const { sql, name } of alterStatements) {
+      try {
+        db.exec(sql);
+      } catch (err) {
+        if (!String(err.message).includes("duplicate column name")) {
+          logger.warn(`Warning while adding ${name}:`, err.message);
+        }
       }
     }
 
-    try {
-      db.run("ALTER TABLE force_join_channels ADD COLUMN button_text TEXT");
-    } catch (err) {
-      if (!String(err.message).includes("duplicate column name")) {
-        logger.warn("Warning while adding button_text:", err.message);
-      }
-    }
-
-    try {
-      db.run("ALTER TABLE force_join_channels ADD COLUMN chat_type TEXT DEFAULT 'channel'");
-    } catch (err) {
-      if (!String(err.message).includes("duplicate column name")) {
-        logger.warn("Warning while adding chat_type:", err.message);
-      }
-    }
-
-    try {
-      db.run("ALTER TABLE files ADD COLUMN usage_count INTEGER DEFAULT 0");
-    } catch (err) {
-      if (!String(err.message).includes("duplicate column name")) {
-        logger.warn("Warning while adding usage_count:", err.message);
-      }
-    }
-
-    try {
-      db.run("ALTER TABLE users ADD COLUMN created_at INTEGER DEFAULT 0");
-    } catch (err) {
-      if (!String(err.message).includes("duplicate column name")) {
-        logger.warn("Warning while adding users.created_at:", err.message);
-      }
-    }
-
-    db.run(`CREATE TABLE IF NOT EXISTS user_channel_joins (
+    db.exec(`CREATE TABLE IF NOT EXISTS user_channel_joins (
       user_id INTEGER,
       channel_id INTEGER,
       PRIMARY KEY (user_id, channel_id)
     )`);
 
-    db.run(`CREATE TABLE IF NOT EXISTS dynamic_admins (
+    db.exec(`CREATE TABLE IF NOT EXISTS dynamic_admins (
       id INTEGER PRIMARY KEY
+    )`);
+
+    db.exec(`CREATE TABLE IF NOT EXISTS pending_deletions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chat_id INTEGER,
+      message_id INTEGER,
+      delete_at INTEGER
     )`);
 
     const defaults = [
@@ -157,14 +104,13 @@ async function initializeDatabase() {
     ];
 
     for (const [key, value] of defaults) {
-      const val = await getSetting(key);
+      const val = getSetting(key);
       if (val === null) {
-        await setSetting(key, JSON.stringify(value));
+        setSetting(key, JSON.stringify(value));
       }
     }
 
-    await refreshCachedSettings();
-    persistDatabase();
+    refreshCachedSettings();
   } catch (err) {
     logger.error("Error connecting to SQLite database:", err.message);
     throw err;
@@ -173,55 +119,36 @@ async function initializeDatabase() {
 
 function runQuery(sql, params = []) {
   const stmt = db.prepare(sql);
-  stmt.bind(params);
-  stmt.step();
-  stmt.free();
-
-  const changesRes = db.exec("SELECT changes() AS changes");
-  const changes = changesRes?.[0]?.values?.[0]?.[0] ?? 0;
-  const rowIdRes = db.exec("SELECT last_insert_rowid() AS lastInsertRowid");
-  const lastInsertRowid = rowIdRes?.[0]?.values?.[0]?.[0] ?? 0;
-
-  persistDatabase();
-  return { changes, lastInsertRowid };
+  const result = stmt.run(...params);
+  return { changes: result.changes, lastInsertRowid: result.lastInsertRowid };
 }
 
 function getQuery(sql, params = []) {
   const stmt = db.prepare(sql);
-  stmt.bind(params);
-  const hasRow = stmt.step();
-  const row = hasRow ? stmt.getAsObject() : null;
-  stmt.free();
-  return row;
+  return stmt.get(...params) || null;
 }
 
 function allQuery(sql, params = []) {
   const stmt = db.prepare(sql);
-  stmt.bind(params);
-  const rows = [];
-  while (stmt.step()) {
-    rows.push(stmt.getAsObject());
-  }
-  stmt.free();
-  return rows;
+  return stmt.all(...params);
 }
 
-async function getSetting(key) {
-  const row = await getQuery("SELECT value FROM settings WHERE key = ?", [key]);
+function getSetting(key) {
+  const row = getQuery("SELECT value FROM settings WHERE key = ?", [key]);
   return row ? row.value : null;
 }
 
-async function setSetting(key, value) {
-  await runQuery("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [
+function setSetting(key, value) {
+  runQuery("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [
     key,
     value,
   ]);
   cachedSettings = null;
   logger.debug(`Setting '${key}' changed and cache invalidated.`);
-  await refreshCachedSettings();
+  refreshCachedSettings();
 }
 
-async function refreshCachedSettings() {
+function refreshCachedSettings() {
   const defaultSettings = {
     caption_text: "برای دانلود فایل‌های بیشتر، در کانال ما عضو شوید.",
     delete_timeout_ms: 30000,
@@ -237,9 +164,9 @@ async function refreshCachedSettings() {
 
   const settings = {};
   for (const key in defaultSettings) {
-    let value = await getSetting(key);
+    let value = getSetting(key);
     if (value === null) {
-      await setSetting(key, JSON.stringify(defaultSettings[key]));
+      setSetting(key, JSON.stringify(defaultSettings[key]));
       settings[key] = defaultSettings[key];
     } else {
       try {
@@ -255,27 +182,27 @@ async function refreshCachedSettings() {
   return settings;
 }
 
-async function getBotSettingsCached() {
+function getBotSettingsCached() {
   if (!cachedSettings) {
     return refreshCachedSettings();
   }
   return cachedSettings;
 }
 
-async function readDB() {
-  const settings = await getBotSettingsCached();
-  const users = await allQuery("SELECT id, link_usage_count, created_at FROM users");
+function readDB() {
+  const settings = getBotSettingsCached();
+  const users = allQuery("SELECT id, link_usage_count, created_at FROM users");
   const userIds = users.map((row) => row.id);
-  const bannedUsers = (await allQuery("SELECT id FROM banned_users")).map(
+  const bannedUsers = allQuery("SELECT id FROM banned_users").map(
     (row) => row.id
   );
-  const forceJoinChannels = await allQuery(
+  const forceJoinChannels = allQuery(
     "SELECT id, title, invite_link, button_text, chat_type, condition_type, condition_limit, current_members_count FROM force_join_channels"
   );
-  const forceJoinExtraLinks = await allQuery(
+  const forceJoinExtraLinks = allQuery(
     "SELECT id, title, invite_link, button_text FROM force_join_extra_links ORDER BY id ASC"
   );
-  const files = await allQuery("SELECT * FROM files");
+  const files = allQuery("SELECT * FROM files");
 
   const forceJoin = forceJoinChannels.map((channel) => ({
     id: channel.id,
@@ -326,24 +253,24 @@ async function readDB() {
   };
 }
 
-async function saveUser(userId) {
+function saveUser(userId) {
   const now = Date.now();
-  const existingUser = await getQuery("SELECT id, created_at FROM users WHERE id = ?", [userId]);
+  const existingUser = getQuery("SELECT id, created_at FROM users WHERE id = ?", [userId]);
   if (!existingUser) {
-    await runQuery("INSERT INTO users (id, link_usage_count, created_at) VALUES (?, ?, ?)", [
+    runQuery("INSERT INTO users (id, link_usage_count, created_at) VALUES (?, ?, ?)", [
       userId,
       0,
       now,
     ]);
     logger.info(`New user registered: ${userId}`);
   } else if (!existingUser.created_at || Number(existingUser.created_at) <= 0) {
-    await runQuery("UPDATE users SET created_at = ? WHERE id = ?", [now, userId]);
+    runQuery("UPDATE users SET created_at = ? WHERE id = ?", [now, userId]);
   }
 }
 
-async function deleteFileByIdentifier(fileIdentifier) {
+function deleteFileByIdentifier(fileIdentifier) {
   try {
-    const result = await runQuery("DELETE FROM files WHERE file_identifier = ?", [
+    const result = runQuery("DELETE FROM files WHERE file_identifier = ?", [
       fileIdentifier,
     ]);
     if (result.changes > 0) {
@@ -358,14 +285,14 @@ async function deleteFileByIdentifier(fileIdentifier) {
   }
 }
 
-async function getDynamicAdminIds() {
-  const rows = await allQuery("SELECT id FROM dynamic_admins");
+function getDynamicAdminIds() {
+  const rows = allQuery("SELECT id FROM dynamic_admins");
   return rows.map((row) => row.id);
 }
 
-async function addDynamicAdminDB(adminId) {
+function addDynamicAdminDB(adminId) {
   try {
-    await runQuery("INSERT OR IGNORE INTO dynamic_admins (id) VALUES (?)", [adminId]);
+    runQuery("INSERT OR IGNORE INTO dynamic_admins (id) VALUES (?)", [adminId]);
     return true;
   } catch (error) {
     logger.error(`Error adding admin ${adminId}:`, error);
@@ -373,14 +300,30 @@ async function addDynamicAdminDB(adminId) {
   }
 }
 
-async function removeDynamicAdminDB(adminId) {
+function removeDynamicAdminDB(adminId) {
   try {
-    const result = await runQuery("DELETE FROM dynamic_admins WHERE id = ?", [adminId]);
+    const result = runQuery("DELETE FROM dynamic_admins WHERE id = ?", [adminId]);
     return result.changes > 0;
   } catch (error) {
     logger.error(`Error removing admin ${adminId}:`, error);
     return false;
   }
+}
+
+function scheduleDeletion(chatId, messageId, deleteAt) {
+  runQuery(
+    "INSERT INTO pending_deletions (chat_id, message_id, delete_at) VALUES (?, ?, ?)",
+    [chatId, messageId, deleteAt]
+  );
+}
+
+function getExpiredDeletions() {
+  const now = Date.now();
+  return allQuery("SELECT id, chat_id, message_id FROM pending_deletions WHERE delete_at <= ?", [now]);
+}
+
+function removeDeletion(id) {
+  runQuery("DELETE FROM pending_deletions WHERE id = ?", [id]);
 }
 
 module.exports = {
@@ -397,4 +340,7 @@ module.exports = {
   getDynamicAdminIds,
   addDynamicAdminDB,
   removeDynamicAdminDB,
+  scheduleDeletion,
+  getExpiredDeletions,
+  removeDeletion,
 };

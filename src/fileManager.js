@@ -2,7 +2,7 @@ const { InlineKeyboard } = require("grammy");
 const { logger, isAdmin } = require("./config");
 const { generateFileIdentifier, safeEditOrReply } = require("./helpers");
 const { checkUserSubscription } = require("./forceJoin");
-const { runQuery, getQuery, readDB } = require("../db");
+const { runQuery, getQuery, readDB, scheduleDeletion } = require("../db");
 
 async function sendFileContent(
   ctx,
@@ -109,6 +109,8 @@ async function sendFileContent(
         )
       : undefined;
 
+    const deleteAt = Date.now() + deleteTimeoutMs;
+
     await ctx.reply(
       `\u23F3 \u062A\u0648\u062C\u0647: \u0627\u06CC\u0646 \u0641\u0627\u06CC\u0644\u200C\u0647\u0627 \u062A\u0627 ${
         deleteTimeoutMs / 1000
@@ -116,27 +118,13 @@ async function sendFileContent(
       warningKeyboard ? { reply_markup: warningKeyboard } : undefined
     );
 
-    setTimeout(async () => {
-      for (const msgId of sentMessages) {
-        try {
-          await ctx.api.deleteMessage(ctx.chat.id, msgId);
-          logger.info(`Message ${msgId} deleted for chat ${ctx.chat.id}.`);
-        } catch (e) {
-          logger.warn(`Failed deleting message ${msgId} for chat ${ctx.chat.id}: ${e.message}`);
-        }
-      }
+    for (const msgId of sentMessages) {
+      scheduleDeletion(ctx.chat.id, msgId, deleteAt);
+    }
 
-      if (Number.isInteger(triggerMessageId)) {
-        try {
-          await ctx.api.deleteMessage(ctx.chat.id, triggerMessageId);
-          logger.info(`Trigger message ${triggerMessageId} deleted for chat ${ctx.chat.id}.`);
-        } catch (e) {
-          logger.warn(
-            `Failed deleting trigger message ${triggerMessageId} for chat ${ctx.chat.id}: ${e.message}`
-          );
-        }
-      }
-    }, deleteTimeoutMs);
+    if (Number.isInteger(triggerMessageId)) {
+      scheduleDeletion(ctx.chat.id, triggerMessageId, deleteAt);
+    }
   }
 }
 
