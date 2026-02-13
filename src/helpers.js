@@ -1,8 +1,14 @@
 const { InlineKeyboard } = require("grammy");
 const { logger, isAdmin } = require("./config");
+const crypto = require("crypto");
+const { getQuery } = require("../db");
 
 function generateFileIdentifier() {
-  return Math.random().toString(36).substring(2, 12);
+  let identifier;
+  do {
+    identifier = crypto.randomBytes(8).toString("base64url").substring(0, 12);
+  } while (getQuery("SELECT 1 FROM files WHERE file_identifier = ?", [identifier]));
+  return identifier;
 }
 
 function hasCallbackButton(replyMarkup, callbackData) {

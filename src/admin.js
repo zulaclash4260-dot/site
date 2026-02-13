@@ -423,7 +423,7 @@ async function showForceJoinStats(ctx) {
     : 0;
 
   // Get actual total tracked joins from user_channel_joins table
-  const joinCountRow = getQuery("SELECT COUNT(*) AS total FROM user_channel_joins");
+  const joinCountRow = await getQuery("SELECT COUNT(*) AS total FROM user_channel_joins");
   const totalTrackedJoins = joinCountRow ? joinCountRow.total : 0;
 
   let message = `📊 *آمار جوین اجباری:*
@@ -451,7 +451,7 @@ async function showForceJoinStats(ctx) {
         conditionText = `حذف بعد از *${channel.condition.limit}* عضو (فعلی: *${channel.condition.current_count}* - ${progress}%)`;
       }
       // Get actual unique join count from user_channel_joins table
-      const channelJoinRow = getQuery(
+      const channelJoinRow = await getQuery(
         "SELECT COUNT(*) AS cnt FROM user_channel_joins WHERE channel_id = ?",
         [channel.id]
       );

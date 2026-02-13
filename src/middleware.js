@@ -117,6 +117,7 @@ function registerMiddleware(bot) {
         broadcastMessageType: null,
         broadcastMessageOptions: {},
         broadcastOriginalMessageId: null,
+        forceViewMessageSentTime: null,
       }),
     })
   );

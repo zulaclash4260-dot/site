@@ -43,6 +43,8 @@ const {
   getDynamicAdminIds,
   addDynamicAdminDB,
   removeDynamicAdminDB,
+  getExpiredDeletions,
+  removeDeletion,
 } = require("./db");
 
 if (!TOKEN) {
@@ -1133,25 +1135,25 @@ bot.on("message", async (ctx) => {
 });
 
 // --- Callback Query Handlers ---
-bot.callbackQuery("admin_broadcast", promptForBroadcast);
-bot.callbackQuery("admin_add_channel", showAddChannelMenu);
-bot.callbackQuery("admin_list_files", showFileList);
-bot.callbackQuery("admin_get_link", promptForSend);
-bot.callbackQuery("admin_manage_users", showUserManagementMenu);
-bot.callbackQuery("admin_panel_main", showMainAdminPanel);
-bot.callbackQuery("admin_advanced_settings", showAdvancedSettingsMenu);
-bot.callbackQuery("admin_show_stats", showStatisticsMenu);
-bot.callbackQuery("show_user_stats", showUserStats);
-bot.callbackQuery("show_file_stats", showFileStats);
-bot.callbackQuery("show_force_join_stats", showForceJoinStats);
-bot.callbackQuery("show_link_usage_stats", promptForLinkUsageStats);
-bot.callbackQuery("show_top_30_files", showTop30Files);
-bot.callbackQuery("admin_help_guide", showAdminHelpGuide);
-bot.callbackQuery("list_admins", showAdminList);
-bot.callbackQuery("remove_admin_start", showRemoveAdminMenu);
-bot.callbackQuery("list_force_join_channels", showForceJoinList);
+adminBot.callbackQuery("admin_broadcast", promptForBroadcast);
+adminBot.callbackQuery("admin_add_channel", showAddChannelMenu);
+adminBot.callbackQuery("admin_list_files", showFileList);
+adminBot.callbackQuery("admin_get_link", promptForSend);
+adminBot.callbackQuery("admin_manage_users", showUserManagementMenu);
+adminBot.callbackQuery("admin_panel_main", showMainAdminPanel);
+adminBot.callbackQuery("admin_advanced_settings", showAdvancedSettingsMenu);
+adminBot.callbackQuery("admin_show_stats", showStatisticsMenu);
+adminBot.callbackQuery("show_user_stats", showUserStats);
+adminBot.callbackQuery("show_file_stats", showFileStats);
+adminBot.callbackQuery("show_force_join_stats", showForceJoinStats);
+adminBot.callbackQuery("show_link_usage_stats", promptForLinkUsageStats);
+adminBot.callbackQuery("show_top_30_files", showTop30Files);
+adminBot.callbackQuery("admin_help_guide", showAdminHelpGuide);
+adminBot.callbackQuery("list_admins", showAdminList);
+adminBot.callbackQuery("remove_admin_start", showRemoveAdminMenu);
+adminBot.callbackQuery("list_force_join_channels", showForceJoinList);
 
-bot.callbackQuery("add_admin_start", async (ctx) => {
+adminBot.callbackQuery("add_admin_start", async (ctx) => {
   if (!isPrimaryAdmin(ctx)) {
     await ctx.answerCallbackQuery({ text: "⚠️ فقط ادمین‌های اصلی می‌توانند ادمین جدید اضافه کنند.", show_alert: true });
     return;
@@ -1161,7 +1163,7 @@ bot.callbackQuery("add_admin_start", async (ctx) => {
   await safeEditOrReply(ctx, text);
 });
 
-bot.callbackQuery(/^remove_admin_confirm:(.+)/, async (ctx) => {
+adminBot.callbackQuery(/^remove_admin_confirm:(.+)/, async (ctx) => {
   if (!isPrimaryAdmin(ctx)) {
     await ctx.answerCallbackQuery({ text: "⚠️ فقط ادمین‌های اصلی می‌توانند ادمین‌ها را حذف کنند.", show_alert: true });
     return;
@@ -1207,28 +1209,28 @@ bot.callbackQuery("user_go_home", async (ctx) => {
   }
 });
 
-bot.callbackQuery("admin_delete_file_by_link", async (ctx) => {
+adminBot.callbackQuery("admin_delete_file_by_link", async (ctx) => {
   ctx.session.step = "awaiting_delete_link";
   const text =
     "لطفاً لینک اشتراک فایلی که می‌خواهید حذف کنید را ارسال کنید.\n\nبرای لغو /cancel را ارسال کنید.";
   await safeEditOrReply(ctx, text);
 });
 
-bot.callbackQuery("ban_user_start", async (ctx) => {
+adminBot.callbackQuery("ban_user_start", async (ctx) => {
   ctx.session.step = "awaiting_user_to_ban";
   const text =
     "لطفاً شناسه عددی کاربر مورد نظر را ارسال کنید یا یک پیام از او به اینجا فوروارد کنید.\n\nبرای لغو /cancel را ارسال کنید.";
   await safeEditOrReply(ctx, text);
 });
 
-bot.callbackQuery("unban_user_start", async (ctx) => {
+adminBot.callbackQuery("unban_user_start", async (ctx) => {
   ctx.session.step = "awaiting_user_to_unban";
   const text =
     "لطفاً شناسه عددی کاربری که می‌خواهید از مسدودیت خارج شود را ارسال کنید.\n\nبرای لغو /cancel را ارسال کنید.";
   await safeEditOrReply(ctx, text);
 });
 
-bot.callbackQuery("broadcast_choose_send", async (ctx) => {
+adminBot.callbackQuery("broadcast_choose_send", async (ctx) => {
   ctx.session.step = "awaiting_broadcast_message_send";
   const text =
     "✅ حالت «ارسال پیام جدید» فعال شد.\n\nلطفاً پیام مورد نظر خود را برای ارسال مستقیم، ارسال کنید.\n\n*کپشن، پارس مود و دکمه‌های شیشه‌ای (Inline Keyboard) پیام اصلی حفظ خواهند شد.*\n\nبرای لغو /cancel را ارسال کنید.";
@@ -1239,7 +1241,7 @@ bot.callbackQuery("broadcast_choose_send", async (ctx) => {
   );
 });
 
-bot.callbackQuery("broadcast_choose_forward", async (ctx) => {
+adminBot.callbackQuery("broadcast_choose_forward", async (ctx) => {
   ctx.session.step = "awaiting_broadcast_message_forward";
   const text =
     "✅ حالت «فوروارد پیام» فعال شد.\n\nلطفاً پیام مورد نظر خود را برای فوروارد همگانی، فوروارد کنید.\n\n*توجه: تمامی جزئیات پیام دقیقاً مانند پیام اصلی فوروارد خواهد شد.*\n\n⚠️ اگر پیام از یک کانال خصوصی فوروارد شود که ربات به آن دسترسی ندارد، ممکن است عملیات فوروارد با شکست مواجه شود.\n\nبرای لغو /cancel را ارسال کنید.";
@@ -1250,14 +1252,14 @@ bot.callbackQuery("broadcast_choose_forward", async (ctx) => {
   );
 });
 
-bot.callbackQuery("add_channel_start", async (ctx) => {
+adminBot.callbackQuery("add_channel_start", async (ctx) => {
   ctx.session.step = "awaiting_channel_info";
   const text =
     "یک پیام از کانال/گروه مورد نظر فوروارد کنید یا لینک آن را ارسال کنید.\n\nمثال لینک عمومی: https://t.me/channel_name\nمثال لینک خصوصی: https://t.me/+AbCdEfGh\n\nتوجه: برای چک عضویت، ربات باید در آن کانال/گروه ادمین باشد.\n\nبرای لغو /cancel را ارسال کنید.";
   await safeEditOrReply(ctx, text);
 });
 
-bot.callbackQuery("add_extra_link_start", async (ctx) => {
+adminBot.callbackQuery("add_extra_link_start", async (ctx) => {
   ctx.session.step = "awaiting_extra_link_url";
   ctx.session.pendingExtraLink = null;
   const text =
@@ -1265,7 +1267,7 @@ bot.callbackQuery("add_extra_link_start", async (ctx) => {
   await safeEditOrReply(ctx, text);
 });
 
-bot.callbackQuery("remove_channel_start", async (ctx) => {
+adminBot.callbackQuery("remove_channel_start", async (ctx) => {
   try {
     const dbData = await readDB();
     if (dbData.forceJoin.length === 0) {
@@ -1301,7 +1303,7 @@ bot.callbackQuery("remove_channel_start", async (ctx) => {
   }
 });
 
-bot.callbackQuery("remove_extra_link_start", async (ctx) => {
+adminBot.callbackQuery("remove_extra_link_start", async (ctx) => {
   try {
     const links = await allQuery(
       "SELECT id, title, button_text FROM force_join_extra_links ORDER BY id DESC"
@@ -1344,7 +1346,7 @@ bot.callbackQuery("remove_extra_link_start", async (ctx) => {
   }
 });
 
-bot.callbackQuery(/^remove_ch_/, async (ctx) => {
+adminBot.callbackQuery(/^remove_ch_/, async (ctx) => {
   const channelIdRaw = ctx.match.input.substring("remove_ch_".length);
   const channelId = parseInt(channelIdRaw, 10);
 
@@ -1374,7 +1376,7 @@ bot.callbackQuery(/^remove_ch_/, async (ctx) => {
   }
 });
 
-bot.callbackQuery(/^remove_extra_link_(\d+)$/, async (ctx) => {
+adminBot.callbackQuery(/^remove_extra_link_(\d+)$/, async (ctx) => {
   const linkId = parseInt(ctx.match[1], 10);
   try {
     const result = await runQuery(
@@ -1401,8 +1403,11 @@ bot.callbackQuery(/^remove_extra_link_(\d+)$/, async (ctx) => {
   }
 });
 
-bot.callbackQuery(/^list_/, async (ctx) => {
-  const fileType = ctx.match.input.substring("list_".length);
+const FILES_PER_PAGE = 10;
+
+adminBot.callbackQuery(/^list_([a-z]+)(?::(\d+))?$/, async (ctx) => {
+  const fileType = ctx.match[1];
+  const page = parseInt(ctx.match[2] || "1", 10);
   const dbData = await readDB();
   const files = dbData.files.filter((f) => {
     if (f.file_type) return f.file_type === fileType;
@@ -1418,24 +1423,32 @@ bot.callbackQuery(/^list_/, async (ctx) => {
     return;
   }
   await ctx.answerCallbackQuery();
-  const links = files.map(
+
+  const totalPages = Math.ceil(files.length / FILES_PER_PAGE);
+  const currentPage = Math.min(Math.max(page, 1), totalPages);
+  const start = (currentPage - 1) * FILES_PER_PAGE;
+  const pageFiles = files.slice(start, start + FILES_PER_PAGE);
+
+  const links = pageFiles.map(
     (file) => `https://t.me/${ctx.me.username}?start=${file.file_identifier}`
   );
-  const chunkSize = 10;
-  for (let i = 0; i < links.length; i += chunkSize) {
-    const chunk = links.slice(i, i + chunkSize).join("\n");
-    try {
-      await ctx.reply(chunk, { disable_web_page_preview: true });
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    } catch (e) {
-      logger.error(`خطا در ارسال لیست لینک‌ها به ${ctx.from?.id}:`, e);
-      await ctx.reply("خطا در ارسال برخی لینک‌ها. لطفاً دوباره تلاش کنید.");
-      break;
-    }
+
+  let message = `📄 صفحه ${currentPage} از ${totalPages} (مجموع: ${files.length} فایل)\n\n`;
+  message += links.join("\n");
+
+  const keyboard = new InlineKeyboard();
+  if (currentPage > 1) {
+    keyboard.text("⬅️ صفحه قبل", `list_${fileType}:${currentPage - 1}`);
   }
+  if (currentPage < totalPages) {
+    keyboard.text("➡️ صفحه بعد", `list_${fileType}:${currentPage + 1}`);
+  }
+  keyboard.row().text("⬅️ بازگشت", "admin_list_files");
+
+  await safeEditOrReply(ctx, message, keyboard, { disable_web_page_preview: true });
 });
 
-bot.callbackQuery("upload_single", async (ctx) => {
+adminBot.callbackQuery("upload_single", async (ctx) => {
   ctx.session.uploadMode = "single";
   ctx.session.step = "awaiting_single_file";
   const text =
@@ -1444,7 +1457,7 @@ bot.callbackQuery("upload_single", async (ctx) => {
   await safeEditOrReply(ctx, text, keyboard);
 });
 
-bot.callbackQuery("upload_group", async (ctx) => {
+adminBot.callbackQuery("upload_group", async (ctx) => {
   ctx.session.uploadMode = "group";
   ctx.session.pendingFiles = [];
   ctx.session.currentFileForCaption = null;
@@ -1455,14 +1468,14 @@ bot.callbackQuery("upload_group", async (ctx) => {
   await safeEditOrReply(ctx, text, keyboard);
 });
 
-bot.callbackQuery("store_in_channel", (ctx) =>
+adminBot.callbackQuery("store_in_channel", (ctx) =>
   promptForCaptionSingle(ctx, true)
 );
-bot.callbackQuery("dont_store_in_channel_single", (ctx) =>
+adminBot.callbackQuery("dont_store_in_channel_single", (ctx) =>
   promptForCaptionSingle(ctx, false)
 );
 
-bot.callbackQuery("cancel_upload", async (ctx) => {
+adminBot.callbackQuery("cancel_upload", async (ctx) => {
   ctx.session.step = "idle";
   ctx.session.pendingFile = null;
   ctx.session.pendingFiles = [];
@@ -1481,7 +1494,7 @@ bot.callbackQuery("cancel_upload", async (ctx) => {
   logger.info(`آپلود فایل توسط ادمین ${ctx.from?.id} لغو شد.`);
 });
 
-bot.callbackQuery(/^set_member_limit:(.+)/, async (ctx) => {
+adminBot.callbackQuery(/^set_member_limit:(.+)/, async (ctx) => {
   const channelIdRaw = ctx.match[1];
   ctx.session.targetChannelId = parseInt(channelIdRaw, 10);
   ctx.session.step = "awaiting_member_limit";
@@ -1490,40 +1503,40 @@ bot.callbackQuery(/^set_member_limit:(.+)/, async (ctx) => {
   await safeEditOrReply(ctx, text);
 });
 
-bot.callbackQuery("store_group_in_channel", async (ctx) => {
+adminBot.callbackQuery("store_group_in_channel", async (ctx) => {
   const text = "⏳ در حال ذخیره فایل‌ها در کانال و ساخت لینک...";
   await safeEditOrReply(ctx, text);
   await processAndSaveGroupFiles(ctx, true, bot);
 });
 
-bot.callbackQuery("dont_store_in_channel_group", async (ctx) => {
+adminBot.callbackQuery("dont_store_in_channel_group", async (ctx) => {
   const text = "⏳ در حال ساخت لینک اشتراک...";
   await safeEditOrReply(ctx, text);
   await processAndSaveGroupFiles(ctx, false, bot);
 });
 
-bot.callbackQuery("change_caption_start", async (ctx) => {
+adminBot.callbackQuery("change_caption_start", async (ctx) => {
   ctx.session.step = "awaiting_new_caption_text";
   const text =
     "لطفاً متن جدید کپشن را ارسال کنید:\n\nبرای لغو /cancel را ارسال کنید.";
   await safeEditOrReply(ctx, text);
 });
 
-bot.callbackQuery("change_delete_time_start", async (ctx) => {
+adminBot.callbackQuery("change_delete_time_start", async (ctx) => {
   ctx.session.step = "awaiting_new_delete_time";
   const text =
     "لطفاً زمان جدید حذف محتوا را بر حسب ثانیه ارسال کنید (مثال: 30):\n\nبرای لغو /cancel را ارسال کنید.";
   await safeEditOrReply(ctx, text);
 });
 
-bot.callbackQuery("change_force_view_text_start", async (ctx) => {
+adminBot.callbackQuery("change_force_view_text_start", async (ctx) => {
   ctx.session.step = "awaiting_new_force_view_text";
   const text =
     "لطفاً متن جدید پیام بررسی اجباری را ارسال کنید:\n\nبرای لغو /cancel را ارسال کنید.";
   await safeEditOrReply(ctx, text);
 });
 
-bot.callbackQuery("toggle_force_view_status", async (ctx) => {
+adminBot.callbackQuery("toggle_force_view_status", async (ctx) => {
   const dbData = await readDB();
   const newState = !dbData.settings.is_force_view_enabled;
   await setSetting("is_force_view_enabled", JSON.stringify(newState));
@@ -1537,7 +1550,7 @@ bot.callbackQuery("toggle_force_view_status", async (ctx) => {
   );
 });
 
-bot.callbackQuery("toggle_bot_status", async (ctx) => {
+adminBot.callbackQuery("toggle_bot_status", async (ctx) => {
   const dbData = await readDB();
   const newState = !dbData.settings.is_bot_enabled;
   await setSetting("is_bot_enabled", JSON.stringify(newState));
@@ -1551,20 +1564,20 @@ bot.callbackQuery("toggle_bot_status", async (ctx) => {
   );
 });
 
-bot.callbackQuery("change_flood_limit_start", async (ctx) => {
+adminBot.callbackQuery("change_flood_limit_start", async (ctx) => {
   ctx.session.step = "awaiting_new_flood_limit";
   const text = `لطفاً حد مجاز جدید برای تعداد پیام‌ها در ${FLOOD_LIMIT_SECONDS_GLOBAL} ثانیه را وارد کنید (مثال: 10):\n\nبرای لغو /cancel را ارسال کنید.`;
   await safeEditOrReply(ctx, text);
 });
 
-bot.callbackQuery("change_file_storage_channel_start", async (ctx) => {
+adminBot.callbackQuery("change_file_storage_channel_start", async (ctx) => {
   ctx.session.step = "awaiting_new_file_storage_channel";
   const text =
     "لطفاً آیدی جدید کانال ذخیره فایل‌ها را با فرمت `@YourChannelID` ارسال کنید:\n\nبرای لغو /cancel را ارسال کنید.";
   await safeEditOrReply(ctx, text);
 });
 
-bot.callbackQuery("change_broadcast_speed_start", async (ctx) => {
+adminBot.callbackQuery("change_broadcast_speed_start", async (ctx) => {
   const dbData = await readDB();
   const currentProfile =
     typeof dbData.settings.broadcast_speed_profile === "string"
@@ -1596,7 +1609,7 @@ bot.callbackQuery("change_broadcast_speed_start", async (ctx) => {
   await safeEditOrReply(ctx, text, keyboard);
 });
 
-bot.callbackQuery(/^set_broadcast_speed:(safe|balanced|fast)$/, async (ctx) => {
+adminBot.callbackQuery(/^set_broadcast_speed:(safe|balanced|fast)$/, async (ctx) => {
   const profile = ctx.match[1];
   const profileLabels = {
     safe: "ایمن",
@@ -1615,7 +1628,7 @@ bot.callbackQuery(/^set_broadcast_speed:(safe|balanced|fast)$/, async (ctx) => {
   await showAdvancedSettingsMenu(ctx);
 });
 
-bot.callbackQuery("change_regular_start_text_start", async (ctx) => {
+adminBot.callbackQuery("change_regular_start_text_start", async (ctx) => {
   ctx.session.step = "awaiting_new_regular_start_text";
   const text =
     "لطفاً متن استارت کاربران عادی را ارسال کنید.\n\nبرای بازگشت به پیام پیش‌فرض، عبارت `default` را بفرستید.\nبرای لغو /cancel را ارسال کنید.";
@@ -1712,11 +1725,32 @@ bot.catch(async (err) => {
 });
 
 // --- Start Bot ---
+async function processExpiredDeletions() {
+  const expired = getExpiredDeletions();
+  for (const row of expired) {
+    try {
+      await bot.api.deleteMessage(row.chat_id, row.message_id);
+      logger.info(`Message ${row.message_id} deleted for chat ${row.chat_id}.`);
+    } catch (e) {
+      logger.warn(`Failed deleting message ${row.message_id} for chat ${row.chat_id}: ${e.message}`);
+    }
+    removeDeletion(row.id);
+  }
+}
+
 async function startBot() {
   await initializeDatabase();
   // Load dynamic admins from database into memory cache
-  const dynamicAdminIdsList = await getDynamicAdminIds();
+  const dynamicAdminIdsList = getDynamicAdminIds();
   loadDynamicAdmins(dynamicAdminIdsList);
+
+  // Process pending deletions every 5 seconds
+  setInterval(() => {
+    processExpiredDeletions().catch((err) => {
+      logger.error("Error processing expired deletions:", err);
+    });
+  }, 5000);
+
   logger.info("ربات در حال اجرا است...");
   await bot.start();
 }
