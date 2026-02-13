@@ -636,7 +636,7 @@ async function checkRateLimit(userId, limit = 10, window = 30) {
 
 ---
 
-**تاریخ ایجاد:** {{ current_date }}
+**تاریخ ایجاد:** 2026-02-13
 **نسخه ربات:** 1.0.0
 **تحلیل‌گر:** GitHub Copilot Agent
 

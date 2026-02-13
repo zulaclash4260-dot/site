@@ -45,12 +45,15 @@ async function sendFileContent(
             message = await ctx.replyWithAnimation(file_id, { caption: captionToSend });
             break;
           case "voice":
-            message = await ctx.replyWithVoice(file_id, { caption: captionToSend });
+            // Voice messages don't support captions
+            message = await ctx.replyWithVoice(file_id);
             break;
           case "video_note":
+            // Video notes don't support captions
             message = await ctx.replyWithVideoNote(file_id);
             break;
           case "sticker":
+            // Stickers don't support captions
             message = await ctx.replyWithSticker(file_id);
             break;
           default:
@@ -96,12 +99,15 @@ async function sendFileContent(
           message = await ctx.replyWithAnimation(file.file_id, { caption: captionToSend });
           break;
         case "voice":
-          message = await ctx.replyWithVoice(file.file_id, { caption: captionToSend });
+          // Voice messages don't support captions
+          message = await ctx.replyWithVoice(file.file_id);
           break;
         case "video_note":
+          // Video notes don't support captions
           message = await ctx.replyWithVideoNote(file.file_id);
           break;
         case "sticker":
+          // Stickers don't support captions
           message = await ctx.replyWithSticker(file.file_id);
           break;
         default:
@@ -438,12 +444,15 @@ async function processAndSaveSingleFile(ctx, userCaption, bot) {
           await bot.api.sendAnimation(FILE_STORAGE_CHANNEL_CURRENT, fileToProcess.file_id, { caption: captionToSend });
           break;
         case "voice":
-          await bot.api.sendVoice(FILE_STORAGE_CHANNEL_CURRENT, fileToProcess.file_id, { caption: captionToSend });
+          // Voice messages don't support captions
+          await bot.api.sendVoice(FILE_STORAGE_CHANNEL_CURRENT, fileToProcess.file_id);
           break;
         case "video_note":
+          // Video notes don't support captions
           await bot.api.sendVideoNote(FILE_STORAGE_CHANNEL_CURRENT, fileToProcess.file_id);
           break;
         case "sticker":
+          // Stickers don't support captions
           await bot.api.sendSticker(FILE_STORAGE_CHANNEL_CURRENT, fileToProcess.file_id);
           break;
         default:
@@ -517,12 +526,15 @@ async function processAndSaveGroupFiles(ctx, shouldStore, bot) {
             await bot.api.sendAnimation(FILE_STORAGE_CHANNEL_CURRENT, file.file_id, { caption: captionToSend });
             break;
           case "voice":
-            await bot.api.sendVoice(FILE_STORAGE_CHANNEL_CURRENT, file.file_id, { caption: captionToSend });
+            // Voice messages don't support captions
+            await bot.api.sendVoice(FILE_STORAGE_CHANNEL_CURRENT, file.file_id);
             break;
           case "video_note":
+            // Video notes don't support captions
             await bot.api.sendVideoNote(FILE_STORAGE_CHANNEL_CURRENT, file.file_id);
             break;
           case "sticker":
+            // Stickers don't support captions
             await bot.api.sendSticker(FILE_STORAGE_CHANNEL_CURRENT, file.file_id);
             break;
           default:
