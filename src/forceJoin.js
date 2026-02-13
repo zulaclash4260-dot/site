@@ -163,7 +163,11 @@ async function evaluateUserSubscription(ctx, userId, requiredTargets) {
 
 function buildJoinMessage(missingChannels, extraLinks) {
   let joinMessage =
-    "🔔 لطفاً ابتدا در کانال‌ها/گروه‌های زیر عضو شوید و سپس دکمه تایید را بزنید:\n\n";
+    "🔔 *بررسی اجباری - عضویت در کانال‌ها*\n\n" +
+    "لطفاً مراحل زیر را انجام دهید:\n\n" +
+    "1️⃣ روی هر کانال کلیک کنید و عضو شوید\n" +
+    "2️⃣ پس از عضویت در همه کانال‌ها، دکمه *«تایید و دریافت فایل»* را بزنید\n\n" +
+    "📋 *کانال‌های مورد نیاز:*\n\n";
 
   missingChannels.forEach((channel) => {
     joinMessage += `- *${channel.title}*\n`;
@@ -171,7 +175,8 @@ function buildJoinMessage(missingChannels, extraLinks) {
 
   if (extraLinks.length > 0) {
     joinMessage +=
-      "\n🔗 لینک‌های زیر اختیاری هستند (برای دسترسی بیشتر) و بررسی عضویت برای آن‌ها انجام نمی‌شود:\n";
+      "\n🔗 *لینک‌های اختیاری:*\n" +
+      "لینک‌های زیر اختیاری هستند و بررسی عضویت برای آن‌ها انجام نمی‌شود:\n";
   }
 
   return joinMessage;
@@ -193,7 +198,7 @@ function buildJoinKeyboard(missingChannels, extraLinks, fileIdentifier) {
   });
 
   const callbackData = `check_sub:${fileIdentifier || "no_file"}`;
-  keyboard.text("✅ تایید عضویت", callbackData);
+  keyboard.text("✅ تایید و دریافت فایل", callbackData);
 
   return keyboard;
 }
@@ -297,7 +302,7 @@ async function checkUserSubscription(ctx, userId) {
 
 /**
  * Track that a user has joined a channel/group and check auto-removal condition.
- * Uses INSERT OR IGNORE to prevent race conditions with duplicate inserts.
+ * Uses INSERT OR IGNORE and checks changes() to prevent race conditions with duplicate inserts.
  */
 async function trackChannelJoin(ctx, userId, channel) {
   const userHasJoinedBefore = await getQuery(
@@ -306,32 +311,46 @@ async function trackChannelJoin(ctx, userId, channel) {
   );
 
   if (!userHasJoinedBefore) {
+    // Insert the join record
     await runQuery(
       "INSERT OR IGNORE INTO user_channel_joins (user_id, channel_id) VALUES (?, ?)",
       [userId, channel.id]
     );
-    await runQuery(
-      "UPDATE force_join_channels SET current_members_count = current_members_count + 1 WHERE id = ?",
-      [channel.id]
+    
+    // Verify the insert was successful (not a duplicate race condition)
+    const inserted = await getQuery(
+      "SELECT changes() as changes"
     );
-    logger.info(
-      `کاربر ${userId} به ${channel.title} (${channel.id}) پیوست. شمارنده اعضا افزایش یافت.`
-    );
+    
+    // Only increment counter if the insert was successful
+    if (inserted && inserted.changes > 0) {
+      await runQuery(
+        "UPDATE force_join_channels SET current_members_count = current_members_count + 1 WHERE id = ?",
+        [channel.id]
+      );
+      logger.info(
+        `کاربر ${userId} به ${channel.title} (${channel.id}) پیوست. شمارنده اعضا افزایش یافت.`
+      );
 
-    const updatedChannel = await getQuery(
-      "SELECT condition_limit, current_members_count FROM force_join_channels WHERE id = ?",
-      [channel.id]
-    );
+      const updatedChannel = await getQuery(
+        "SELECT condition_limit, current_members_count FROM force_join_channels WHERE id = ?",
+        [channel.id]
+      );
 
-    if (
-      updatedChannel &&
-      updatedChannel.condition_limit &&
-      updatedChannel.current_members_count >= updatedChannel.condition_limit
-    ) {
-      await notifyAdminAndRemoveChannel(
-        ctx,
-        channel,
-        updatedChannel.current_members_count
+      if (
+        updatedChannel &&
+        updatedChannel.condition_limit &&
+        updatedChannel.current_members_count >= updatedChannel.condition_limit
+      ) {
+        await notifyAdminAndRemoveChannel(
+          ctx,
+          channel,
+          updatedChannel.current_members_count
+        );
+      }
+    } else {
+      logger.debug(
+        `کاربر ${userId} قبلاً به ${channel.title} (${channel.id}) پیوسته بود (تکراری نادیده گرفته شد).`
       );
     }
   }
@@ -402,7 +421,7 @@ function registerForceJoinHandlers(bot, handleFileRequest, onSubscriptionConfirm
     if (dbData.forceJoin.length === 0) {
       try {
         await ctx.answerCallbackQuery({
-          text: "✅ هیچ کانال/گروه اجباری‌ای تنظیم نشده است.",
+          text: "✅ بررسی اجباری تایید شد!",
         });
       } catch (e) {
         logger.debug(
@@ -415,7 +434,7 @@ function registerForceJoinHandlers(bot, handleFileRequest, onSubscriptionConfirm
       } else if (typeof onSubscriptionConfirmed === "function") {
         await onSubscriptionConfirmed(ctx);
       } else {
-        await ctx.reply("✅ عضویت شما با موفقیت تایید شد!");
+        await ctx.reply("✅ بررسی اجباری با موفقیت تایید شد!");
       }
       return;
     }
@@ -434,18 +453,19 @@ function registerForceJoinHandlers(bot, handleFileRequest, onSubscriptionConfirm
     }
 
     if (!allSubscribed) {
-      let alertText = "❌ شما هنوز در تمام کانال‌ها/گروه‌های مورد نیاز عضو نشده‌اید.";
+      let alertText = "❌ *بررسی عضویت ناموفق*\n\nشما هنوز در تمام کانال‌های مورد نیاز عضو نشده‌اید.";
       if (missingChannels.length > 0) {
-        let channelList = "\nلطفاً عضو شوید:";
+        let channelList = "\n\n*کانال‌های باقی‌مانده:*";
         for (const ch of missingChannels) {
-          const entry = `\n- ${ch.title}`;
-          if ((alertText + channelList + entry).length > 195) {
+          const entry = `\n• ${ch.title}`;
+          if ((alertText + channelList + entry).length > 180) {
             channelList += "\n...";
             break;
           }
           channelList += entry;
         }
         alertText += channelList;
+        alertText += "\n\n✅ پس از عضویت، دوباره دکمه تایید را بزنید.";
       }
 
       try {
@@ -471,6 +491,15 @@ function registerForceJoinHandlers(bot, handleFileRequest, onSubscriptionConfirm
     }
 
     ctx.session.is_pending_subscription = false;
+
+    // Show success notification to user
+    try {
+      await ctx.answerCallbackQuery({
+        text: "✅ بررسی اجباری تایید شد! در حال ارسال فایل...",
+      });
+    } catch (e) {
+      logger.debug(`خطا در answerCallbackQuery (موفقیت): ${e.message}`);
+    }
 
     if (ctx.callbackQuery && ctx.callbackQuery.message) {
       try {
@@ -499,7 +528,7 @@ function registerForceJoinHandlers(bot, handleFileRequest, onSubscriptionConfirm
     } else if (typeof onSubscriptionConfirmed === "function") {
       await onSubscriptionConfirmed(ctx);
     } else {
-      await ctx.reply("✅ عضویت شما با موفقیت تایید شد!");
+      await ctx.reply("✅ بررسی اجباری با موفقیت تایید شد!");
     }
 
     try {
