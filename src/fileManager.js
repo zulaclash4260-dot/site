@@ -152,16 +152,19 @@ async function confirmAndSendFile(ctx, fileIdentifier) {
   const now = Date.now();
   const messageSentTime = ctx.callbackQuery.message.date * 1000;
 
-  if (now - messageSentTime < 10000) {
+  const FORCE_VIEW_WAIT_MS = 10000;
+  const elapsed = now - messageSentTime;
+  if (elapsed < FORCE_VIEW_WAIT_MS) {
+    const remainingSec = Math.ceil((FORCE_VIEW_WAIT_MS - elapsed) / 1000);
     try {
       await ctx.answerCallbackQuery({
-        text: "لطفا به آرامی چک کنید و ریکشن بزنید.",
+        text: `⏳ لطفاً ${remainingSec} ثانیه دیگر صبر کنید، سپس دکمه تأیید را بزنید.\nابتدا پست‌های کانال را مشاهده و ریکشن بزنید.`,
         show_alert: true,
       });
     } catch (e) {
       logger.debug(`خطا در answerCallbackQuery (تایید زودهنگام): ${e.message}`);
     }
-    logger.info(`کاربر ${userId} روی دکمه تایید زودتر از زمان کلیک کرد.`);
+    logger.info(`کاربر ${userId} روی دکمه تایید زودتر از زمان کلیک کرد (${remainingSec} ثانیه باقیمانده).`);
     return;
   }
 
