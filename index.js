@@ -240,6 +240,7 @@ adminBot.command("cancel", async (ctx) => {
     ctx.session.targetChannelId = null;
     ctx.session.is_pending_subscription = false;
     ctx.session.uploadMode = null;
+    ctx.session.tempFile = null;
     ctx.session.forceViewMessageId = null;
     ctx.session.currentFileForCaption = null;
     ctx.session.currentFileIdentifier = null;
@@ -509,6 +510,18 @@ bot.on("message", async (ctx) => {
       } else if (msg.document) {
         message_type = "document";
         ctx.session.broadcastMessageContent = msg.document.file_id;
+      } else if (msg.animation) {
+        message_type = "animation";
+        ctx.session.broadcastMessageContent = msg.animation.file_id;
+      } else if (msg.voice) {
+        message_type = "voice";
+        ctx.session.broadcastMessageContent = msg.voice.file_id;
+      } else if (msg.video_note) {
+        message_type = "video_note";
+        ctx.session.broadcastMessageContent = msg.video_note.file_id;
+      } else if (msg.sticker) {
+        message_type = "sticker";
+        ctx.session.broadcastMessageContent = msg.sticker.file_id;
       } else {
         await ctx.reply(
           "❌ نوع پیام ارسالی برای ارسال همگانی پشتیبانی نمی‌شود."
@@ -1063,7 +1076,11 @@ bot.on("message", async (ctx) => {
     ctx.message.photo ||
     ctx.message.video ||
     ctx.message.audio ||
-    ctx.message.document
+    ctx.message.document ||
+    ctx.message.animation ||
+    ctx.message.voice ||
+    ctx.message.video_note ||
+    ctx.message.sticker
   ) {
     let file_id, file_type;
     const msg = ctx.message;
@@ -1079,6 +1096,18 @@ bot.on("message", async (ctx) => {
     } else if (msg.document) {
       file_id = msg.document.file_id;
       file_type = "document";
+    } else if (msg.animation) {
+      file_id = msg.animation.file_id;
+      file_type = "animation";
+    } else if (msg.voice) {
+      file_id = msg.voice.file_id;
+      file_type = "voice";
+    } else if (msg.video_note) {
+      file_id = msg.video_note.file_id;
+      file_type = "video_note";
+    } else if (msg.sticker) {
+      file_id = msg.sticker.file_id;
+      file_type = "sticker";
     }
 
     if (file_id && file_type) {
@@ -1098,7 +1127,16 @@ bot.on("message", async (ctx) => {
         ctx.session.step = "awaiting_caption_input_group_file";
         const totalFiles = ctx.session.pendingFiles.length + 1;
         const fileTypePersian =
-          { photo: "عکس", video: "ویدیو", audio: "آهنگ", document: "سند" }[file_type] || file_type;
+          { 
+            photo: "عکس", 
+            video: "ویدیو", 
+            audio: "آهنگ", 
+            document: "سند",
+            animation: "انیمیشن",
+            voice: "پیام صوتی",
+            video_note: "پیام ویدیویی",
+            sticker: "استیکر"
+          }[file_type] || file_type;
         await ctx.reply(
           `✅ فایل شماره ${totalFiles} (${fileTypePersian}) دریافت شد.\n\nلطفاً کپشن آن را وارد کنید یا /skip را بزنید.\nبرای اتمام و ساخت لینک: /done`
         );
@@ -1106,7 +1144,16 @@ bot.on("message", async (ctx) => {
         ctx.session.pendingFile = { id: file_id, type: file_type };
         ctx.session.step = "awaiting_storage_decision";
         const fileTypePersian =
-          { photo: "عکس", video: "ویدیو", audio: "آهنگ", document: "سند" }[file_type] || file_type;
+          { 
+            photo: "عکس", 
+            video: "ویدیو", 
+            audio: "آهنگ", 
+            document: "سند",
+            animation: "انیمیشن",
+            voice: "پیام صوتی",
+            video_note: "پیام ویدیویی",
+            sticker: "استیکر"
+          }[file_type] || file_type;
         const keyboard = new InlineKeyboard()
           .text("✅ بله، در کانال ذخیره شود", "store_in_channel")
           .text("❎ خیر", "dont_store_in_channel_single")
@@ -1117,13 +1164,27 @@ bot.on("message", async (ctx) => {
           { reply_markup: keyboard, reply_to_message_id: msg.message_id }
         );
       } else {
+        // No upload mode set - prompt user to select and temporarily store file
+        ctx.session.tempFile = { id: file_id, type: file_type };
+        const fileTypePersian =
+          { 
+            photo: "عکس", 
+            video: "ویدیو", 
+            audio: "آهنگ", 
+            document: "سند",
+            animation: "انیمیشن",
+            voice: "پیام صوتی",
+            video_note: "پیام ویدیویی",
+            sticker: "استیکر"
+          }[file_type] || file_type;
         const keyboard = new InlineKeyboard()
-          .text("⬆️ دریافت لینک فایل", "admin_get_link")
+          .text("📄 لینک تکی", "auto_upload_single")
+          .text("📦 لینک گروهی", "auto_upload_group")
           .row()
-          .text("🏠 پنل اصلی", "admin_panel_main");
+          .text("❌ لغو", "cancel_upload");
         await ctx.reply(
-          "📁 برای دریافت لینک فایل، لطفاً ابتدا از پنل مدیریت نوع آپلود (تکی یا گروهی) را انتخاب کنید.",
-          { reply_markup: keyboard }
+          `✅ فایل ${fileTypePersian} دریافت شد!\n\n📁 نوع لینک مورد نظر را انتخاب کنید:`,
+          { reply_markup: keyboard, reply_to_message_id: msg.message_id }
         );
       }
       logger.info(
@@ -1452,7 +1513,7 @@ adminBot.callbackQuery("upload_single", async (ctx) => {
   ctx.session.uploadMode = "single";
   ctx.session.step = "awaiting_single_file";
   const text =
-    "📌 حالت دریافت لینک تکی فعال شد.\n\nلطفاً فایل مورد نظر (عکس، ویدیو، آهنگ یا سند) را ارسال کنید تا لینک اشتراک‌گذاری آن ساخته شود.\n\nبرای لغو /cancel را ارسال کنید.";
+    "📌 حالت دریافت لینک تکی فعال شد.\n\nلطفاً فایل مورد نظر (عکس، ویدیو، آهنگ، سند، انیمیشن، پیام صوتی، پیام ویدیویی یا استیکر) را ارسال کنید تا لینک اشتراک‌گذاری آن ساخته شود.\n\nبرای لغو /cancel را ارسال کنید.";
   const keyboard = new InlineKeyboard().text("⬅️ بازگشت", "admin_get_link");
   await safeEditOrReply(ctx, text, keyboard);
 });
@@ -1468,6 +1529,81 @@ adminBot.callbackQuery("upload_group", async (ctx) => {
   await safeEditOrReply(ctx, text, keyboard);
 });
 
+// Auto upload handlers when file is sent without selecting mode first
+adminBot.callbackQuery("auto_upload_single", async (ctx) => {
+  if (!ctx.session.tempFile) {
+    await ctx.answerCallbackQuery({
+      text: "❌ فایل موقت یافت نشد. لطفاً دوباره فایل را ارسال کنید.",
+      show_alert: true,
+    });
+    return;
+  }
+  
+  const tempFile = ctx.session.tempFile;
+  ctx.session.tempFile = null;
+  ctx.session.uploadMode = "single";
+  ctx.session.pendingFile = { id: tempFile.id, type: tempFile.type };
+  ctx.session.step = "awaiting_storage_decision";
+  
+  const fileTypePersian =
+    { 
+      photo: "عکس", 
+      video: "ویدیو", 
+      audio: "آهنگ", 
+      document: "سند",
+      animation: "انیمیشن",
+      voice: "پیام صوتی",
+      video_note: "پیام ویدیویی",
+      sticker: "استیکر"
+    }[tempFile.type] || tempFile.type;
+  
+  const keyboard = new InlineKeyboard()
+    .text("✅ بله، در کانال ذخیره شود", "store_in_channel")
+    .text("❎ خیر", "dont_store_in_channel_single")
+    .row()
+    .text("❌ لغو عملیات", "cancel_upload");
+  
+  const text = `📌 فایل ${fileTypePersian} برای لینک تکی آماده است.\n\nآیا مایلید این فایل در کانال ذخیره‌سازی نیز آرشیو شود؟`;
+  await safeEditOrReply(ctx, text, keyboard);
+  await ctx.answerCallbackQuery({ text: "✅ حالت لینک تکی فعال شد" });
+});
+
+adminBot.callbackQuery("auto_upload_group", async (ctx) => {
+  if (!ctx.session.tempFile) {
+    await ctx.answerCallbackQuery({
+      text: "❌ فایل موقت یافت نشد. لطفاً دوباره فایل را ارسال کنید.",
+      show_alert: true,
+    });
+    return;
+  }
+  
+  const tempFile = ctx.session.tempFile;
+  ctx.session.tempFile = null;
+  ctx.session.uploadMode = "group";
+  ctx.session.pendingFiles = [];
+  ctx.session.currentFileForCaption = { 
+    file_id: tempFile.id, 
+    file_type: tempFile.type 
+  };
+  ctx.session.step = "awaiting_caption_input_group_file";
+  
+  const fileTypePersian =
+    { 
+      photo: "عکس", 
+      video: "ویدیو", 
+      audio: "آهنگ", 
+      document: "سند",
+      animation: "انیمیشن",
+      voice: "پیام صوتی",
+      video_note: "پیام ویدیویی",
+      sticker: "استیکر"
+    }[tempFile.type] || tempFile.type;
+  
+  const text = `📦 حالت لینک گروهی فعال شد.\n\n✅ فایل شماره 1 (${fileTypePersian}) دریافت شد.\n\nلطفاً کپشن آن را وارد کنید یا /skip را بزنید.\nبرای اتمام و ساخت لینک: /done`;
+  await safeEditOrReply(ctx, text);
+  await ctx.answerCallbackQuery({ text: "✅ حالت لینک گروهی فعال شد" });
+});
+
 adminBot.callbackQuery("store_in_channel", (ctx) =>
   promptForCaptionSingle(ctx, true)
 );
@@ -1480,6 +1616,7 @@ adminBot.callbackQuery("cancel_upload", async (ctx) => {
   ctx.session.pendingFile = null;
   ctx.session.pendingFiles = [];
   ctx.session.uploadMode = null;
+  ctx.session.tempFile = null;
   ctx.session.pendingExtraLink = null;
   ctx.session.forceViewMessageId = null;
   ctx.session.currentFileForCaption = null;

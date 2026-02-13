@@ -41,6 +41,18 @@ async function sendFileContent(
           case "document":
             message = await ctx.replyWithDocument(file_id, { caption: captionToSend });
             break;
+          case "animation":
+            message = await ctx.replyWithAnimation(file_id, { caption: captionToSend });
+            break;
+          case "voice":
+            message = await ctx.replyWithVoice(file_id, { caption: captionToSend });
+            break;
+          case "video_note":
+            message = await ctx.replyWithVideoNote(file_id);
+            break;
+          case "sticker":
+            message = await ctx.replyWithSticker(file_id);
+            break;
           default:
             logger.warn(`نوع فایل نامشخص برای ارسال به کاربر: ${file_type}`);
             await ctx.reply("خطا: نوع فایل نامشخص است و قابل ارسال نیست.");
@@ -79,6 +91,18 @@ async function sendFileContent(
           break;
         case "document":
           message = await ctx.replyWithDocument(file.file_id, { caption: captionToSend });
+          break;
+        case "animation":
+          message = await ctx.replyWithAnimation(file.file_id, { caption: captionToSend });
+          break;
+        case "voice":
+          message = await ctx.replyWithVoice(file.file_id, { caption: captionToSend });
+          break;
+        case "video_note":
+          message = await ctx.replyWithVideoNote(file.file_id);
+          break;
+        case "sticker":
+          message = await ctx.replyWithSticker(file.file_id);
           break;
         default:
           logger.warn(`نوع فایل نامشخص برای ارسال به کاربر: ${file.file_type}`);
@@ -410,6 +434,18 @@ async function processAndSaveSingleFile(ctx, userCaption, bot) {
         case "document":
           await bot.api.sendDocument(FILE_STORAGE_CHANNEL_CURRENT, fileToProcess.file_id, { caption: captionToSend });
           break;
+        case "animation":
+          await bot.api.sendAnimation(FILE_STORAGE_CHANNEL_CURRENT, fileToProcess.file_id, { caption: captionToSend });
+          break;
+        case "voice":
+          await bot.api.sendVoice(FILE_STORAGE_CHANNEL_CURRENT, fileToProcess.file_id, { caption: captionToSend });
+          break;
+        case "video_note":
+          await bot.api.sendVideoNote(FILE_STORAGE_CHANNEL_CURRENT, fileToProcess.file_id);
+          break;
+        case "sticker":
+          await bot.api.sendSticker(FILE_STORAGE_CHANNEL_CURRENT, fileToProcess.file_id);
+          break;
         default:
           logger.warn(`نوع فایل نامشخص برای ذخیره: ${fileToProcess.file_type}`);
           await ctx.reply("خطا: نوع فایل نامشخص است و قابل ذخیره نیست.");
@@ -476,6 +512,18 @@ async function processAndSaveGroupFiles(ctx, shouldStore, bot) {
             break;
           case "document":
             await bot.api.sendDocument(FILE_STORAGE_CHANNEL_CURRENT, file.file_id, { caption: captionToSend });
+            break;
+          case "animation":
+            await bot.api.sendAnimation(FILE_STORAGE_CHANNEL_CURRENT, file.file_id, { caption: captionToSend });
+            break;
+          case "voice":
+            await bot.api.sendVoice(FILE_STORAGE_CHANNEL_CURRENT, file.file_id, { caption: captionToSend });
+            break;
+          case "video_note":
+            await bot.api.sendVideoNote(FILE_STORAGE_CHANNEL_CURRENT, file.file_id);
+            break;
+          case "sticker":
+            await bot.api.sendSticker(FILE_STORAGE_CHANNEL_CURRENT, file.file_id);
             break;
           default:
             logger.warn(`نوع فایل نامشخص برای ذخیره گروهی: ${file.file_type}`);
