@@ -4,6 +4,7 @@ const { runQuery, getQuery, readDB } = require("../db");
 
 const UNAVAILABLE_RETRY_MS = 10 * 60 * 1000;
 const UNAVAILABLE_NOTIFY_COOLDOWN_MS = 30 * 60 * 1000;
+const ALERT_TEXT_MAX_LENGTH = 180;
 
 // channel_id -> retry timestamp
 const unavailableForceJoinTargetsUntil = new Map();
@@ -457,8 +458,8 @@ function registerForceJoinHandlers(bot, handleFileRequest, onSubscriptionConfirm
       if (missingChannels.length > 0) {
         let channelList = "\n\n*کانال‌های باقی‌مانده:*";
         for (const ch of missingChannels) {
-          const entry = `\n• ${ch.title}`;
-          if ((alertText + channelList + entry).length > 180) {
+          const entry = `\n- ${ch.title}`;
+          if ((alertText + channelList + entry).length > ALERT_TEXT_MAX_LENGTH) {
             channelList += "\n...";
             break;
           }
